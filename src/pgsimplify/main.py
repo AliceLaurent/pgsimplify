@@ -123,6 +123,9 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
     # Measure executiont time
     start_time = time.perf_counter()
 
+    # Create output_dir if it doesn't exist yet
+    os.makedirs(output_dir, exist_ok=True)
+
     # Create temporary directory to store temporary files
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
