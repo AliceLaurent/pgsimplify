@@ -322,8 +322,8 @@ def abstract_snarls(graph, snarl_nodes: list[set[str]], snarl_pairs, snarl_sizes
     chains = build_bubbles_chains(snarls)
 
     # Export of the subgraphs if the option is activated
-    print("Save subgraphs...")
     if save_subgraphs :
+        print("Save subgraphs...")
         output_sg = os.path.join(output_dir, f"subgraphs")
         export_subgraphs(graph, chains, output_sg)
 
