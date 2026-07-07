@@ -1,7 +1,7 @@
 import argparse
 import os
 import subprocess
-import tempfile
+import shutil
 import time
 from gfagraphs import Graph
 from pathlib import Path
@@ -103,7 +103,7 @@ def compute_snarls(tmpdir: Path):
             text=True,
         )
 
-def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_size, save_subgraphs):
+def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_size, save_subgraphs, keep_temp):
     """
     Performs simplification piepline
     
@@ -127,23 +127,27 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
     os.makedirs(output_dir, exist_ok=True)
 
     # Create temporary directory to store temporary files
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
+    tmpdir = Path(output_dir) / "temp"
+    os.makedirs(tmpdir, exist_ok=True)
 
-        # Compress graph and store it in temporary directory
-        gfa_file = tmpdir / "compressed_graph.gfa"
-        offsets, nb_nodes_begin = compress_graph(input_gfa_file, max_len_to_collapse, gfa_file)
+    # Compress graph and store it in temporary directory
+    gfa_file = tmpdir / "compressed_graph.gfa"
+    offsets, nb_nodes_begin = compress_graph(input_gfa_file, max_len_to_collapse, gfa_file)
 
-        # Save offsets
-        offset_file = os.path.join(output_dir, f"offsets.txt")
-        save_offsets(offsets, str(offset_file))
+    # Save offsets
+    offset_file = os.path.join(output_dir, f"offsets.txt")
+    save_offsets(offsets, str(offset_file))
 
-        # Compute snarls on compressed graph using vg snarls
-        compute_snarls(tmpdir)
+    # Compute snarls on compressed graph using vg snarls
+    compute_snarls(tmpdir)
 
-        # Simplify small variants
-        json_file = tmpdir / "graph.json"
-        nb_nodes_end = compress_snarls_pipeline(str(gfa_file), str(json_file), output_dir, min_variant_size, save_subgraphs)
+    # Simplify small variants
+    json_file = tmpdir / "graph.json"
+    nb_nodes_end = compress_snarls_pipeline(str(gfa_file), str(json_file), output_dir, min_variant_size, save_subgraphs)
+
+    # Supress temporary directory if the option to keep it is not activated
+    if not keep_temp:
+        shutil.rmtree(tmpdir)
 
     # Print simplification summary
     removed_percentage = (nb_nodes_begin - nb_nodes_end) / nb_nodes_begin * 100
@@ -203,6 +207,14 @@ def main():
         help="Do not save the subgraphs generated during simplification."
     )
 
+    parser_simplify.add_argument(
+        "--keep-temporary-files",
+        action="store_true",
+        dest="keep_temporary_files",
+        default=False,
+        help="Keep the temporary fiels generating during piepline."
+    )
+
     # Command offsets
     parser_offset = subparsers.add_parser(
         "offsets",
@@ -231,6 +243,7 @@ def main():
             args.max_len_to_collapse,
             args.min_variant_size,
             args.save_subgraphs,
+            args.keep_temporary_files
         )
 
     elif args.command == "offsets":
