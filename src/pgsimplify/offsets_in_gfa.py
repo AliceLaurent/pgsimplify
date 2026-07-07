@@ -140,25 +140,38 @@ def pipeline_offsets(input_dir : str, output_file: str):
         File to save the obtained graph
     """
     input_dir = Path(input_dir)
-    print("Loading main graph...")
-    main_graph_path = input_dir / "main_graph.gfa"
-    if not main_graph_path.exists():
-        raise FileNotFoundError(f"Missing required input: {main_graph_path}")
-    graph = Graph(str(main_graph_path), with_sequence=True)
+    if input_dir.is_dir():
+        print("Loading main graph...")
+        main_graph_path = input_dir / "main_graph.gfa"
+        if not main_graph_path.exists():
+            raise FileNotFoundError(f"Missing required input: {main_graph_path}")
+        graph = Graph(str(main_graph_path), with_sequence=True)
 
-    print("Loading subgraphs...")
-    subgraphs_dir = input_dir / "subgraphs"
-    if not subgraphs_dir.exists():
-        raise FileNotFoundError(f"Missing required input: {subgraphs_dir}")
-    subgraphs = load_subgraphs(subgraphs_dir)
-    print(f"Loaded {len(subgraphs)} subgraphs")
+        print("Loading subgraphs...")
+        subgraphs_dir = input_dir / "subgraphs"
+        if not subgraphs_dir.exists():
+            raise FileNotFoundError(f"Missing required input: {subgraphs_dir}")
+        subgraphs = load_subgraphs(subgraphs_dir)
+        print(f"Loaded {len(subgraphs)} subgraphs")
 
-    print("Loading offsets...")
-    offsets_path = input_dir / "offsets.txt"
-    if not offsets_path.exists():
-        raise FileNotFoundError(f"Missing required input: {offsets_path}")
-    offsets = load_offsets(offsets_path)
-    print(f"Loaded {len(offsets)} path offsets")
+        print("Loading offsets...")
+        offsets_path = input_dir / "offsets.txt"
+        if not offsets_path.exists():
+            raise FileNotFoundError(f"Missing required input: {offsets_path}")
+        offsets = load_offsets(offsets_path)
+        print(f"Loaded {len(offsets)} path offsets")
+    
+    elif input_dir.suffix == ".gfa":
+        if not input_dir.exists():
+            raise FileNotFoundError(f"Missing graph: {input_dir}")
+        graph = Graph(str(input_dir), with_sequence=True)
+        subgraphs = {}
+        offsets = {}
+
+    else :
+        raise ValueError(
+        "Input must be either an existing directory or a '.gfa' file."
+    )
 
     print("Computing offsets...")
     compute_offsets(
