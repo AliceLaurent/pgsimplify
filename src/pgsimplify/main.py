@@ -3,6 +3,7 @@ import os
 import subprocess
 import shutil
 import time
+import resource
 from gfagraphs import Graph
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from pgsimplify.simplify_non_branching_paths import compress_non_branching_paths
 from pgsimplify.simplify_snp_mnp import compress_bubbles_chains
 from pgsimplify.simplify_small_variants import compress_snarls_pipeline
 from pgsimplify.offsets_in_gfa import pipeline_offsets
+from pgsimplify.utils import write_report
 
 def compress_graph(input_gfa, max_len_to_collapse, tmpdir):
     """
@@ -59,7 +61,13 @@ def compress_graph(input_gfa, max_len_to_collapse, tmpdir):
     # Temporary saving the graph
     graph.save_graph(str(tmpdir), minimal=True)
 
-    return nb_nodes_begin
+    return {
+    "initial_nodes": nb_nodes_begin,
+    "after_non_branching": nb_nodes_non_branching_path_compression,
+    "after_snp": nb_nodes_snp_mnp_compression,
+    "removed_non_branching": nb_nodes_begin - nb_nodes_non_branching_path_compression,
+    "removed_snp": nb_nodes_middle - nb_nodes_snp_mnp_compression,
+}
 
 
 def compute_snarls(tmpdir: Path):
@@ -150,27 +158,46 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
 
     # Compress graph and store it in temporary directory
     gfa_file = tmpdir / "compressed_graph.gfa"
-    nb_nodes_begin = compress_graph(str(input_gfa_file), max_len_to_collapse, gfa_file)
+    compression_stats = compress_graph(str(input_gfa_file), max_len_to_collapse, gfa_file)
 
     # Compute snarls on compressed graph using vg snarls
     compute_snarls(tmpdir)
 
     # Simplify small variants
     json_file = tmpdir / "graph.json"
-    nb_nodes_end = compress_snarls_pipeline(str(gfa_file), str(json_file), str(output_dir), min_variant_size, save_subgraphs)
+    snarl_stats = compress_snarls_pipeline(str(gfa_file), str(json_file), str(output_dir), min_variant_size, save_subgraphs)
 
     # Supress temporary directory if the option to keep it is not activated
     if not keep_temp:
         shutil.rmtree(tmpdir)
 
     # Print simplification summary
-    removed_percentage = (nb_nodes_begin - nb_nodes_end) / nb_nodes_begin * 100
+    removed_percentage = (compression_stats['initial_nodes'] - snarl_stats["after_small_variants"]) / compression_stats['initial_nodes'] * 100
     print(f"Removed nodes: {removed_percentage:.2f}% ")
 
     # Print execution time
-    end_time = time.perf_counter()
-    print(f"Execution time: {end_time - start_time:.2f} s")
+    elapsed = time.perf_counter() - start_time
 
+    # Memory peak
+    peak_ram = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+
+    # ru_maxrss in Ko for Linux
+    peak_ram_gb = peak_ram / 1024 / 102
+
+    write_report(
+        output_dir=output_dir,
+        input_gfa=input_gfa_file,
+        max_len=max_len_to_collapse,
+        min_variant=min_variant_size,
+        save_subgraphs=save_subgraphs,
+        compression=compression_stats,
+        snarls=snarl_stats,
+        elapsed=elapsed,
+        peak_ram_gb=peak_ram_gb,
+    )
+
+    print(f"Execution time: {elapsed:.2f} s")
+    print(f"Peak RAM: {peak_ram_gb:.2f} GB")
 
 def main():
     parser = argparse.ArgumentParser(

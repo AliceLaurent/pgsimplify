@@ -3,6 +3,7 @@ from gfagraphs import Graph
 from itertools import pairwise
 from collections import defaultdict
 from pathlib import Path
+from datetime import datetime
 
 def compute_edge_orientation(graph):
     """
@@ -139,3 +140,69 @@ def load_subgraphs(subgraphs_dir):
         subgraphs[sg_name] = Graph(str(gfa_file), with_sequence=True)
 
     return subgraphs
+
+def write_report(
+    output_dir,
+    input_gfa,
+    max_len,
+    min_variant,
+    save_subgraphs,
+    compression,
+    snarls,
+    elapsed,
+    peak_ram_gb,
+):
+
+    report = Path(output_dir) / "simplification_report.txt"
+
+    initial = compression["initial_nodes"]
+    final = snarls["after_small_variants"]
+
+    total_removed = initial - final
+
+    with open(report, "w") as f:
+
+        f.write("=" * 60 + "\n")
+        f.write("PGSIMPLIFY REPORT\n")
+        f.write("=" * 60 + "\n\n")
+
+        f.write(f"Date                 : {datetime.now()}\n")
+        f.write(f"Input graph          : {input_gfa}\n")
+        f.write(f"Output directory     : {output_dir}\n\n")
+
+        f.write("Parameters\n")
+        f.write("-" * 30 + "\n")
+        f.write(f"Maximum MNP length   : {max_len}\n")
+        f.write(f"Minimum variant size : {min_variant}\n")
+        f.write(f"Save subgraphs       : {save_subgraphs}\n\n")
+
+        f.write("Compression summary\n")
+        f.write("-" * 30 + "\n")
+
+        f.write(f"Initial node number                  : {compression['initial_nodes']}\n\n")
+
+        f.write("Non-branching path compression\n")
+        f.write(f"    Removed nodes                    : {compression['removed_non_branching']}\n")
+        f.write(f"    Remaining nodes                  : {compression['after_non_branching']}\n\n")
+
+        f.write("SNP/MNP compression\n")
+        f.write(f"    Removed nodes                    : {compression['removed_snp']}\n")
+        f.write(f"    Remaining nodes                  : {compression['after_snp']}\n\n")
+
+        f.write("Small variant simplification\n")
+        f.write(f"    Snarls detected                  : {snarls['nb_snarls_detected']}\n")
+        f.write(f"    Snarls simplified                : {snarls['nb_snarls_simplified']}\n")
+        f.write(f"    Removed nodes                    : {snarls['removed_small_variants']}\n")
+        f.write(f"    Remaining nodes                  : {snarls['after_small_variants']}\n\n")
+
+        f.write("Global statistics\n")
+        f.write("-" * 30 + "\n")
+        f.write(f"Initial nodes                        : {initial}\n")
+        f.write(f"Final nodes                          : {final}\n")
+        f.write(f"Total removed                        : {total_removed}\n")
+        f.write(f"Global reduction                     : {100 * total_removed / initial:.2f} %\n\n")
+
+        f.write("Execution\n")
+        f.write("-" * 30 + "\n")
+        f.write(f"Wall time                            : {elapsed:.2f} s\n")
+        f.write(f"Peak RAM                             : {peak_ram_gb:.2f} GB\n")
