@@ -4,7 +4,6 @@ from itertools import pairwise
 from collections import defaultdict
 from pathlib import Path
 
-
 def compute_edge_orientation(graph):
     """
     Compute orientation of the nodes at each side of an edge for each path passing by this edge
@@ -20,7 +19,6 @@ def compute_edge_orientation(graph):
         Dictionnary (edge_begin, edge_end) -> orientation list
     """
     edge_orient = defaultdict(set)
-
     for path in graph.paths.values():
 
         for (u, ou), (v, ov) in pairwise(path["path"]):
@@ -111,57 +109,6 @@ def get_substitutor(letters):
             out += next(iter(col))
 
     return out
-
-def load_offsets(offset_file):
-    """
-    Load the dictionnary path -> offset
-    Ex: #haplotype_name	offset
-        hap1	42
-        hap2	17
-    
-    Parameter
-    ----------
-    offset_file : 
-        Path to offset file
-
-    Returns
-    -------
-    dict[int]
-        Offsets dictionnary
-    """
-    offsets = {}
-
-    with open(offset_file, "r") as f:
-        for line in f:
-
-            line = line.strip()
-
-            if not line or line.startswith("#"):
-                continue
-
-            path_name, offset = line.split("\t")
-            offsets[path_name] = int(offset)
-
-    return offsets
-
-
-def save_offsets(offsets, output_file):
-    """
-    Saves the dictionnary path -> offset in tab-delimited file
-
-    Parameter
-    ----------
-    offsets : 
-        Offsets dictionnary 
-    output_file : 
-        Directory to save the file 
-    """
-    with open(output_file, "w") as f:
-        f.write(f"#haplotype_name\toffset\n")
-
-        for haplotype_name, offset in offsets.items():
-            f.write(f"{haplotype_name}\t{offset}\n")
-
 
 
 def load_subgraphs(subgraphs_dir):

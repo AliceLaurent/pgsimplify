@@ -14,9 +14,9 @@ from gfagraphs import Graph
 from collections import defaultdict
 from pathlib import Path
 
-from pgsimplify.utils import load_offsets, load_subgraphs
+from pgsimplify.utils import load_subgraphs
 
-def compute_offsets(graph, subgraphs, offsets):
+def compute_offsets(graph, subgraphs):
     """
     Adds to each node a JSON string containing the position of the begin and the end of the node on each path
     For example, the line S	872	CA PO:J:{'p1':[(238,240,'+')],'p2':[(312,314,'-')]} tells :
@@ -25,10 +25,8 @@ def compute_offsets(graph, subgraphs, offsets):
          - path p1 contains this sequence from position 238 to 240 
          - path p2 contains the reverse complement of this sequence from position 312 to 314
          - no other paths contains this node
-    This function specially handle the case of simplified graph, using in addition to the graph :
-        - an offset for some paths for which the real sequence begin is in the middle of the first node of the path to ensure coherent position between graph and sequence
-        - a set of subgraphs, corresponding to special nodes in the graph with name sgX with X an integer, 
-        for which the corresponding subgraph need to be traversed to compute real positions
+    This function specially handle the case of simplified graph, using in addition to the graph a set of subgraphs, 
+    corresponding to special nodes in the graph with name sgX with X an integer, for which the corresponding subgraph need to be traversed to compute real positions
 
     Parameters
     ----------
@@ -36,9 +34,6 @@ def compute_offsets(graph, subgraphs, offsets):
             main graph, containing abstracted node sgX with X an integer
     subgraphs : dict[str, Graph]
         subgraphs named sgX with X an integer corresponding to nodes of same name in the main graph
-    offsets : dict[str, int]
-        Offsets for paths that have one
-        Offset is 0 if the path is not in the dictionnary
     """
     # Erase old positions in case they were some
     for seg_data in graph.segments.values():
@@ -49,12 +44,7 @@ def compute_offsets(graph, subgraphs, offsets):
 
     # Compute positions for each path
     for path_name, path_data in graph.paths.items():
-
-        # Adds offsets if ther is one
-        if path_name in offsets:
-            current_pos = -offsets[path_name]
-        else:
-            current_pos = 0
+        current_pos = 0
 
         # Handle the case of a path traversing a subgraph multiple times
         sg_occurrences = defaultdict(int)
@@ -135,7 +125,7 @@ def pipeline_offsets(input_dir : str, output_file: str):
     Parameters
     ----------
     input_dir : Path
-        Directory containing the files needed : main graph, subgraph directory and offsets file
+        Directory containing the files needed : main graph and subgraph directory 
     output_file : Path
         File to save the obtained graph
     """
@@ -154,19 +144,12 @@ def pipeline_offsets(input_dir : str, output_file: str):
         subgraphs = load_subgraphs(subgraphs_dir)
         print(f"Loaded {len(subgraphs)} subgraphs")
 
-        print("Loading offsets...")
-        offsets_path = input_dir / "offsets.txt"
-        if not offsets_path.exists():
-            raise FileNotFoundError(f"Missing required input: {offsets_path}")
-        offsets = load_offsets(offsets_path)
-        print(f"Loaded {len(offsets)} path offsets")
     
     elif input_dir.suffix == ".gfa":
         if not input_dir.exists():
             raise FileNotFoundError(f"Missing graph: {input_dir}")
         graph = Graph(str(input_dir), with_sequence=True)
         subgraphs = {}
-        offsets = {}
 
     else :
         raise ValueError(
@@ -177,7 +160,6 @@ def pipeline_offsets(input_dir : str, output_file: str):
     compute_offsets(
         graph=graph,
         subgraphs=subgraphs,
-        offsets=offsets
     )
 
     print("Saving graph...")

@@ -226,6 +226,49 @@ def get_bubbles(graph: Graph, max_len=50):
             
     return bubbles
 
+def filter_bubbles_containing_paths_end(bubbles, end_nodes):
+    """
+    Filters bubbles containing paths end preventing compression
+
+    Parameter
+    ----------
+    bubbles : 
+        List of SNP/MNP structures with form (source : int, branches : int list, sink : int)
+    end_nodes : dict[set]
+        Gives for each node being at the end of one or more paths the nodes just before/after 
+    
+    Returns
+    -------
+    List[(str, List[str], str)]
+        List of filtered bubbles 
+    """
+    filtered_bubbles = []
+    for bubble in bubbles:
+        source, branches, sink = bubble
+        compressable_bubble = True
+        # If a branch is an end of path, the bubble can't be compressed
+        for branch in branches:
+            if branch in end_nodes:
+                compressable_bubble = False
+        # If source or sink is an end of path, the path must go through all the bubble to be compressable
+        if source in end_nodes :
+            snd_found = False
+            for snd in end_nodes[source]:
+                if snd in branches:
+                    snd_found = True
+            if not snd_found :
+                compressable_bubble = False
+        if sink in end_nodes :
+            snd_found = False
+            for snd in end_nodes[sink]:
+                if snd in branches:
+                    snd_found = True
+            if not snd_found :
+                compressable_bubble = False
+        
+        if compressable_bubble :
+            filtered_bubbles.append(bubble)
+    return filtered_bubbles
 
 def build_bubbles_chains(bubbles):
     """
@@ -263,16 +306,15 @@ def build_bubbles_chains(bubbles):
 
         chain = [start]
         current = start
-        
         while True:
-
             source, _, sink = current
             nxt = source_to_bubble.get(sink)
+
             if nxt is None:
                 break
+
             chain.append(nxt)
             current = nxt
-
         chains.append(chain)
 
     return chains
@@ -287,29 +329,24 @@ def compress_bubbles_chains(graph, max_len=1):
     graph : Graph
         The pangenome graph to compress
     max_len : the maximum length of a MNP to compress
-
-    Returns
-    -------
-    dict(int)
-        Offsets dictionnary
     """
    
     # Compute SNP/MNP structures
     bubbles = get_bubbles(graph, max_len)
 
-    # Organize structures in SNP/MNP chains
-    chains = build_bubbles_chains(bubbles)
-
     # For cases where a path begins in the middle of a future compressed node
-    offsets = {}
-    first_node_to_paths = defaultdict(list)
-    first_nodes = {}
+    end_nodes = defaultdict(set)
 
-    # Build dictionnary first node of a path -> path name
+    # Build dictionnary end node of a path -> node just before/after end node for direction
     for name, pdata in graph.paths.items():
-        if pdata['path']:
-            first_node = pdata['path'][0][0]
-            first_node_to_paths[first_node].append(name)
+        end_nodes[pdata['path'][0][0]].add(pdata['path'][1][0])
+        end_nodes[pdata['path'][-1][0]].add(pdata['path'][-2][0])
+
+    # Filters bubbles containing a paths ends that prevents compression
+    filtered_bubbles = filter_bubbles_containing_paths_end(bubbles, end_nodes)
+
+    # Organize structures in SNP/MNP chains
+    chains = build_bubbles_chains(filtered_bubbles)
 
     # Compute nodes that will be removed and new sequence that will replace them for each chain
     suppressed_nodes = set()
@@ -320,11 +357,8 @@ def compress_bubbles_chains(graph, max_len=1):
         # It will receive a new sequence replacing all nodes of the chain
         new_seq = graph.segments[final_node]['seq']
 
-        # List for the path having their first node in this chain
-        offset_paths = []
-
         # Course of the chain
-        for  source, branches, sink in chain:
+        for  _, branches, sink in chain:
             
             # Compute sequence to replace the chain
             seqs = []
@@ -343,44 +377,6 @@ def compress_bubbles_chains(graph, max_len=1):
 
             for b in branches :
                 suppressed_nodes.add(b)
-                if b in first_node_to_paths :
-                    offset_paths = first_node_to_paths[b]
-                
-            if source in first_node_to_paths :
-                offset_paths = first_node_to_paths[source]
-            if sink in first_node_to_paths :
-                offset_paths = first_node_to_paths[sink]
-
-        # In cases of an offset (path begin in the chain), a set of all nodes in the chain is computed
-        chain_nodes = set()
-
-        for source, branches, sink in chain:
-            chain_nodes.add(source)
-            chain_nodes.add(sink)
-
-            for branch in branches:
-                chain_nodes.add(branch)
-
-        # Course of begin of paths that need an offset for this chain to count which part of the chain is run through by the path
-        for path_name in offset_paths:
-            len_of_chain_in_path = 0
-            final_node_in_hap = False
-            for n, o in graph.paths[path_name]['path']:
-                if n not in chain_nodes:
-                    break
-                else :
-                    len_of_chain_in_path += graph.segments[n]['length']
-                    if n == final_node :
-                        final_node_in_hap = True
-            # Offset is substraction of length of the chain in path to length of compressed sequence
-            len_offset = len(new_seq) - len_of_chain_in_path
-            if len_offset != 0 :
-                offsets[path_name] = len_offset
-            # In cases of offset where the first node of the chain is not in the path
-            # The first node of the chain is saved as first node of the path (since onmy the first node of the chain is saved in final graph)
-            # Orientation is the one of the real first node of the path
-            if not final_node_in_hap:
-                first_nodes[path_name] = (final_node, graph.paths[path_name]['path'][0][1])
         
         # Content of the final is replaced by the new compressed content
         graph.segments[final_node]['seq'] = new_seq
@@ -404,9 +400,6 @@ def compress_bubbles_chains(graph, max_len=1):
     for name, pdata in graph.paths.items():
 
         new_path = []
-        # First node is artificially added if needed
-        if name in first_nodes:
-            new_path.append(first_nodes[name])
 
         # Path are copied except for the supressed nodes
         for n, o in pdata['path']:
@@ -433,52 +426,3 @@ def compress_bubbles_chains(graph, max_len=1):
     # Update of sequence offsets and nieghbours
     graph.sequence_offsets()
     graph.compute_neighbors()
-
-    return offsets
-
-
-def iterative_bubble_compression(graph, offsets, max_len_to_collapse = 50, nb_iter = 2):
-    """
-    Iterate SNP/MNP Compression
-    
-    Parameter
-    ----------
-    graph : Graph
-        Graph to compress
-    offsets : 
-        Offsets dictionnary
-    nb_iter : int
-        Number of iteration for compression
-    max_len_to_collapse : int
-        Maximum length for MNP simplification
-
-    Returns
-    -------
-    dict(int)
-        Offsets dictionnary
-    """
-    total_node_number_before_iter = len(graph.segments)
-    for i in range(nb_iter):
-        print(f"--- Compression iteration {i+1} ---")
-        
-        # Call compression 
-        offset_iter = compress_bubbles_chains(
-            graph=graph,
-            max_len=max_len_to_collapse
-        )
-
-        # Add new offsets
-        new_offsets = offsets.copy()
-
-        for path, value in offset_iter.items():
-            new_offsets[path] = new_offsets.get(path, 0) + value
-
-        offsets = new_offsets
-
-        # Print iteration compression summary
-        nb_segments = len(graph.segments)
-        print(f"SNP/MNP compression : removed {total_node_number_before_iter - nb_segments} nodes form the graph")
-        total_node_number_before_iter = nb_segments
-    
-    return offsets
-

@@ -92,6 +92,7 @@ pgsimplify simplify <input_gfa> <output_dir> [options]
 | `--max-len-to-collapse` | `50` | Maximum MNP length to collapse. |
 | `--min-variant-size` | `50` | Variants smaller than this threshold are simplified. |
 | `--no-subgraphs-save` | disabled | Do not export subgraphs generated during simplification. |
+| `--keep-temporary-files` | disabled | Do not supresse temporary files at the end of execution. |
 
 Example:
 
@@ -133,7 +134,7 @@ input_dir/
 | Argument | Description |
 |----------|-------------|
 | `input_dir` | Graph file or directory produced by the `simplify` command. |
-| `output_gfa` | Output GFA containing the computed PO tags. |
+| `output_gfa` | GFA file to store output graph containing the computed PO tags. |
 
 Example:
 
@@ -152,14 +153,12 @@ The simplification step generates:
 ```text
 output_dir/
 ├── main_graph.gfa
-├── offsets.txt
 └── subgraphs/
 ```
 
 where:
 
 - **main_graph.gfa** is the simplified graph.
-- **offsets.txt** contains the information required to reconstruct PO tags.
 - **subgraphs/** contains one GFA file for each exported subgraph (unless `--no-subgraphs-save` is specified).
 
 Temporary files required by `vg` are created automatically during execution and removed afterwards.

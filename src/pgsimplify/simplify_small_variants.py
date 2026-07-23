@@ -329,13 +329,22 @@ def abstract_snarls(graph, snarl_nodes: list[set[str]], snarl_pairs, snarl_sizes
 
     # Compute simplified graph
     print("Compute simplified graph...")
+    node_to_sg = {}
     suppressed_nodes = set().union(*snarl_nodes)
-    snarls_map = defaultdict(list)
+
     for i in range(len(chains)):
         chain = chains[i]
-        # Create new node and map it to old one
+        # Create new node
         sg = f"sg{i}"
-        snarls_map[chain[0][0]] = sg
+
+        # All snarl nodes are mapped to sg
+        for snarl in chain:
+            source, internal_nodes, sink = snarl
+            node_to_sg[source] = sg
+            node_to_sg[sink] = sg
+            for n in internal_nodes:
+                node_to_sg[n] = sg
+        
         new_seq = graph.segments[chain[0][0]]["seq"]
         for snarl in chain:
             new_seq = new_seq + "N" * snarl_sizes[snarls_to_id[snarl]] + graph.segments[snarl[2]]["seq"]
@@ -359,15 +368,19 @@ def abstract_snarls(graph, snarl_nodes: list[set[str]], snarl_pairs, snarl_sizes
     for name, pdata in graph.paths.items():
 
         new_path = []
+        current_sg = None
 
         for n, o in pdata['path']:
-            if n in snarls_map :
-                new_path.append((snarls_map[n],o))
-                continue
-            if n in suppressed_nodes:
-                continue
 
-            new_path.append((n, o))
+            sg = node_to_sg.get(n)
+            if sg is not None:
+                # Replace only the first node met of the snarl
+                if sg != current_sg:
+                    new_path.append((sg, o))
+                    current_sg = sg
+            else:
+                new_path.append((n, o))
+                current_sg = None
 
         new_paths[name] = {
         **pdata,
@@ -385,21 +398,6 @@ def abstract_snarls(graph, snarl_nodes: list[set[str]], snarl_pairs, snarl_sizes
     # Update the graph
     graph.sequence_offsets()
     graph.compute_neighbors()
-    
-
-def compute_edge_orientation(graph):
-
-    edge_orient = defaultdict(set)
-
-    for path in graph.paths.values():
-
-        for (u, ou), (v, ov) in pairwise(path["path"]):
-
-            edge_orient[(u, v)].add(
-                (ou.value, ov.value)
-            )
-
-    return edge_orient
 
 def compress_snarls_pipeline(
     gfa_path: str,

@@ -7,9 +7,8 @@ from gfagraphs import Graph
 from pathlib import Path
 
 from pgsimplify.simplify_non_branching_paths import compress_non_branching_paths
-from pgsimplify.simplify_snp_mnp import iterative_bubble_compression
+from pgsimplify.simplify_snp_mnp import compress_bubbles_chains
 from pgsimplify.simplify_small_variants import compress_snarls_pipeline
-from pgsimplify.utils import save_offsets
 from pgsimplify.offsets_in_gfa import pipeline_offsets
 
 def compress_graph(input_gfa, max_len_to_collapse, tmpdir):
@@ -27,13 +26,12 @@ def compress_graph(input_gfa, max_len_to_collapse, tmpdir):
     
     Returns
     -------
-    dict[int]
-        Offsets dictionnary
     int
         Number of nodes in input graph
     """
     # Load and initialize graph
     graph = Graph(input_gfa)
+
     graph.compute_neighbors()
     graph.sequence_offsets()
 
@@ -42,26 +40,26 @@ def compress_graph(input_gfa, max_len_to_collapse, tmpdir):
     print(f"Initial node number : {nb_nodes_begin}")
 
     # Linear compression
-    offsets = compress_non_branching_paths(graph)
+    compress_non_branching_paths(graph)
     nb_nodes_non_branching_path_compression = len(graph.segments)
     nb_removed = nb_nodes_begin - nb_nodes_non_branching_path_compression
-    print(f"Linear chains compression : removed {nb_removed} nodes form the graph ({round(nb_removed/nb_nodes_begin*100,ndigits=2)}%)")
-
+    print(f"Non-branching paths compression : removed {nb_removed} nodes form the graph ({round(nb_removed/nb_nodes_begin*100,ndigits=2)}%)")
+    nb_nodes_middle = len(graph.segments)
 
     # SNP/MNPs compression
-    offsets = iterative_bubble_compression(
-        graph,
-        offsets,
-        max_len_to_collapse
+    compress_bubbles_chains(
+                graph=graph,
+                max_len=max_len_to_collapse
     )
     nb_nodes_snp_mnp_compression = len(graph.segments)
-    nb_removed = nb_nodes_begin - nb_nodes_snp_mnp_compression
-    print(f"Total SNP/MNPs compression : removed {nb_removed} nodes form the graph ({round(nb_removed/nb_nodes_begin*100,ndigits=2)}%)")
+    nb_removed = nb_nodes_middle - nb_nodes_snp_mnp_compression
+    print(f"SNP/MNPs compression : removed {nb_removed} nodes form the graph ({round(nb_removed/nb_nodes_middle*100,ndigits=2)}%)")
+    print(f"Number of nodes after non-branching paths and SNP/MNPs compression : {nb_nodes_snp_mnp_compression}")
 
     # Temporary saving the graph
     graph.save_graph(str(tmpdir), minimal=True)
 
-    return offsets, nb_nodes_begin
+    return nb_nodes_begin
 
 
 def compute_snarls(tmpdir: Path):
@@ -132,11 +130,7 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
 
     # Compress graph and store it in temporary directory
     gfa_file = tmpdir / "compressed_graph.gfa"
-    offsets, nb_nodes_begin = compress_graph(input_gfa_file, max_len_to_collapse, gfa_file)
-
-    # Save offsets
-    offset_file = os.path.join(output_dir, f"offsets.txt")
-    save_offsets(offsets, str(offset_file))
+    nb_nodes_begin = compress_graph(input_gfa_file, max_len_to_collapse, gfa_file)
 
     # Compute snarls on compressed graph using vg snarls
     compute_snarls(tmpdir)
@@ -224,7 +218,7 @@ def main():
     parser_offset.add_argument(
         "input_dir",
         type=str,
-        help="Directory produced by the simplify command containing main_graph.gfa, subgraphs/, and offsets.txt."
+        help="Directory produced by the simplify command containing main_graph.gfa and subgraphs/ directory containing the subgraphs"
     )
 
     parser_offset.add_argument(

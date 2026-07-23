@@ -101,6 +101,47 @@ def get_non_branching_nodes(graph : Graph):
 
     return chain_nodes
 
+def filters_nodes_being_path_ends(nodes, end_nodes):
+    """
+    Filter nodes that are path ends which prevent compression
+
+    Parameter
+    ----------
+    nodes : List[(str, str, str)]
+        The nodes of the form (left, node, right) with left and right its potential neighbours in a chain
+    end_nodes : dict[set]
+        Gives for each node being at the end of one or more paths the nodes just before/after 
+    
+    Returns
+    -------
+    List[(str, str, str)]
+        List of filtered nodes
+    """
+    filtered_nodes = []
+    for node in nodes :
+        (left, n, right) = node
+        if n in end_nodes:
+            # The part of the chain on the side where the paths go can still be compressed
+            left_possible = True
+            right_possible = True
+            for snd in end_nodes[n]:
+                if left == snd :
+                    right_possible = False
+                elif right == snd:
+                    left_possible = False
+                else :
+                    left_possible = False
+                    right_possible = False
+            if left_possible and right_possible :
+                filtered_nodes.append(node)
+            elif left_possible :
+                filtered_nodes.append((left, n, None))
+            elif right_possible :
+                filtered_nodes.append((None, n, right))
+        else :
+            filtered_nodes.append(node)
+    return filtered_nodes
+                
 
 def build_non_branching_paths(chain_nodes):
     """
@@ -163,15 +204,12 @@ def build_non_branching_paths(chain_nodes):
 
             chain = []
             current = node
-
             while current is not None and current not in visited:
                 chain.append(current)
                 visited.add(current)
-
                 nxt = right_of.get(current)
-
                 current = nxt
-            
+
             if len(chain) > 1 :
                 chains.append(chain)
 
@@ -191,19 +229,18 @@ def compress_non_branching_paths(graph : Graph):
     # Compute non-branching nodes 
     chain_nodes = get_non_branching_nodes(graph)
 
-    # Build non-branching nodes chains
-    chains = build_non_branching_paths(chain_nodes)
-
     # For cases where a path begins in the middle of a future compressed node
-    offsets = {}
-    first_node_to_paths = defaultdict(list)
-    first_nodes = {}
+    end_nodes = defaultdict(set)
 
-    # Build dictionnary first node of a path -> path name
+    # Build dictionnary end node of a path -> node just before/after end node for direction
     for name, pdata in graph.paths.items():
-        if pdata['path']:
-            first_node = pdata['path'][0][0]
-            first_node_to_paths[first_node].append(name)
+        end_nodes[pdata['path'][0][0]].add(pdata['path'][1][0])
+        end_nodes[pdata['path'][-1][0]].add(pdata['path'][-2][0])
+
+    filtered_nodes = filters_nodes_being_path_ends(chain_nodes, end_nodes)
+
+    # Build non-branching nodes chains
+    chains = build_non_branching_paths(filtered_nodes)
 
    # Compute nodes that will be removed and new sequence that will replace them for each chain
     suppressed_nodes = set()
@@ -213,18 +250,12 @@ def compress_non_branching_paths(graph : Graph):
         final_node = chain[0]
         # It will receive a new sequence replacing all nodes of the chain
         new_seq_parts = []
-        
-        # List for the path having their first node in this chain
-        offset_paths = []
 
         # Course of the chain
         for i in range(len(chain)):
 
             node = chain[i]
 
-            # If the path begins in the middle of this chain, we treat it later
-            if node in first_node_to_paths:
-                offset_paths = first_node_to_paths[node]
 
             # Adding current sequence to new sequence
             new_seq_parts.append(graph.segments[node]['seq'])
@@ -235,29 +266,6 @@ def compress_non_branching_paths(graph : Graph):
         
         # Build new sequence
         new_seq = ''.join(new_seq_parts)
-
-        # In cases of offset in the chain
-        for path_name in offset_paths:
-            len_of_chain_in_path = 0
-            final_node_in_hap = False
-            # Comput which portion of the chain is in the path
-            for n, o in graph.paths[path_name]['path']:
-                if n not in chain:
-                    break
-                else :
-                    len_of_chain_in_path += graph.segments[n]['length']
-                    if n == final_node :
-                        final_node_in_hap = True
-            # Offset value is the difference between chain length and portion in the path
-            len_offset = len(new_seq) - len_of_chain_in_path
-
-            if len_offset != 0 :
-                offsets[path_name] = len_offset
-            # In cases of offset where the first node of the chain is not in the path
-            # The first node of the chain is saved as first node of the path (since onmy the first node of the chain is saved in final graph)
-            # Orientation is the one of the real first node of the path
-            if not final_node_in_hap:
-                first_nodes[path_name] = (final_node, graph.paths[path_name]['path'][0][1])
         
         # Replace content of final node
         graph.segments[final_node]['seq'] = new_seq
@@ -281,9 +289,6 @@ def compress_non_branching_paths(graph : Graph):
     for name, pdata in graph.paths.items():
 
         new_path = []
-
-        if name in first_nodes:
-            new_path.append(first_nodes[name])
 
         for n, o in pdata['path']:
 
@@ -313,5 +318,3 @@ def compress_non_branching_paths(graph : Graph):
     # Update
     graph.sequence_offsets()
     graph.compute_neighbors()
-
-    return offsets
