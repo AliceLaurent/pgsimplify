@@ -121,6 +121,26 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
     # Measure executiont time
     start_time = time.perf_counter()
 
+    input_gfa_file = Path(input_gfa_file)
+    output_dir = Path(output_dir)
+
+    # Vérification du fichier d'entrée
+    if not input_gfa_file.is_file():
+        raise FileNotFoundError(
+            f"Input GFA file not found: {input_gfa_file}"
+        )
+
+    if input_gfa_file.suffix.lower() != ".gfa":
+        raise ValueError(
+            f"Input must be a .gfa file, got: {input_gfa_file}"
+        )
+
+    # Vérification du dossier de sortie
+    if output_dir.exists() and not output_dir.is_dir():
+        raise ValueError(
+            f"Output path exists but is not a directory: {output_dir}"
+        )
+    
     # Create output_dir if it doesn't exist yet
     os.makedirs(output_dir, exist_ok=True)
 
@@ -130,14 +150,14 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
 
     # Compress graph and store it in temporary directory
     gfa_file = tmpdir / "compressed_graph.gfa"
-    nb_nodes_begin = compress_graph(input_gfa_file, max_len_to_collapse, gfa_file)
+    nb_nodes_begin = compress_graph(str(input_gfa_file), max_len_to_collapse, gfa_file)
 
     # Compute snarls on compressed graph using vg snarls
     compute_snarls(tmpdir)
 
     # Simplify small variants
     json_file = tmpdir / "graph.json"
-    nb_nodes_end = compress_snarls_pipeline(str(gfa_file), str(json_file), output_dir, min_variant_size, save_subgraphs)
+    nb_nodes_end = compress_snarls_pipeline(str(gfa_file), str(json_file), str(output_dir), min_variant_size, save_subgraphs)
 
     # Supress temporary directory if the option to keep it is not activated
     if not keep_temp:
