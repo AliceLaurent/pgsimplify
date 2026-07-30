@@ -1,0 +1,43 @@
+============================================================
+PGSIMPLIFY REPORT
+============================================================
+
+Date                 : 2026-07-30 14:57:07.353858
+Input graph          : toy_graph.gfa
+Output directory     : simplified_toy_graph
+
+Parameters
+------------------------------
+Maximum MNP length   : 10
+Minimum variant size : 10
+Save subgraphs       : True
+
+Compression summary
+------------------------------
+Initial node number                  : 14
+
+Non-branching path compression
+    Removed nodes                    : 0
+    Remaining nodes                  : 14
+
+SNP/MNP compression
+    Removed nodes                    : 6
+    Remaining nodes                  : 8
+
+Small variant simplification
+    Snarls detected                  : 3
+    Snarls simplified                : 2
+    Removed nodes                    : 5
+    Remaining nodes                  : 3
+
+Global statistics
+------------------------------
+Initial nodes                        : 14
+Final nodes                          : 3
+Total removed                        : 11
+Global reduction                     : 78.57 %
+
+Execution
+------------------------------
+Wall time                            : 0.12 s
+Peak RAM                             : 0.06 GB

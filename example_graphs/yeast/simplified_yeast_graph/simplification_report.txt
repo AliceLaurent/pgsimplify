@@ -1,0 +1,43 @@
+============================================================
+PGSIMPLIFY REPORT
+============================================================
+
+Date                 : 2026-07-27 14:25:35.684631
+Input graph          : yeast_graph.gfa
+Output directory     : simplified_yeast_graph
+
+Parameters
+------------------------------
+Maximum MNP length   : 50
+Minimum variant size : 50
+Save subgraphs       : True
+
+Compression summary
+------------------------------
+Initial node number                  : 33959
+
+Non-branching path compression
+    Removed nodes                    : 77
+    Remaining nodes                  : 33882
+
+SNP/MNP compression
+    Removed nodes                    : 24317
+    Remaining nodes                  : 9565
+
+Small variant simplification
+    Snarls detected                  : 2630
+    Snarls simplified                : 2465
+    Removed nodes                    : 9056
+    Remaining nodes                  : 509
+
+Global statistics
+------------------------------
+Initial nodes                        : 33959
+Final nodes                          : 509
+Total removed                        : 33450
+Global reduction                     : 98.50 %
+
+Execution
+------------------------------
+Wall time                            : 3.24 s
+Peak RAM                             : 0.23 GB

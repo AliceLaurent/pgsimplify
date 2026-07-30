@@ -1,0 +1,11 @@
+H	VN:Z:1.0
+S	5	ACGGG
+S	6	TAT
+S	7	C
+S	8	GTCTCTKGTGGA
+L	5	+	6	+	0M
+L	6	+	8	+	0M
+L	8	-	7	-	0M
+L	7	-	5	-	0M
+P	HAP1@0	5+,6+,8+	*
+P	HAP2@0	8-,7-,5-	*

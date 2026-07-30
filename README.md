@@ -178,6 +178,14 @@ Snarls are computed internally using the `vg` toolkit. Intermediate files requir
 
 ---
 
+# Example Graphs
+
+Two graph examples are provided.
+The first is a toy example with only a few nodes. Both original and simplified versions of the graph are provided with parameters --max-len-to-collapse 10 --min-variant-size 10.
+A visualisation of the original graph using odgi is provided.
+The second example is a yeast graph built with Minigraph-Cactus on the following dataset : O’Donnell, S., Yue, JX., Saada, O.A. et al. Telomere-to-telomere assemblies of 142 strains characterize the genome structural landscape in Saccharomyces cerevisiae. Nat Genet 55, 1390–1399 (2023). https://doi.org/10.1038/s41588-023-01459-y.
+The original graph contains around 30 000 nodes. You can vizualise it before and after simplification using Bandage.
+
 # Limitations
 
 - The pipeline currently relies on the `vg` toolkit to compute snarls.
@@ -187,7 +195,7 @@ Snarls are computed internally using the `vg` toolkit. Intermediate files requir
 
 # License
 
-This project is distributed under the **Apache License 2.0**. See the `LICENSE` file for details.
+This project is distributed under the **GNU Affero General Public License v3.0**. See the `LICENSE` file for details.
 
 ---
 

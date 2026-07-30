@@ -1,0 +1,10 @@
+H	VN:Z:1.0
+S	1	GCTTCYTGACTG
+S	sg0	ACGGGNNNGTCTCTKGTGGA
+S	sg1	TTAANAGTG
+L	1	+	sg0	+	0M
+L	1	+	sg0	-	0M
+L	sg0	+	sg1	+	0M
+L	sg0	-	sg1	+	0M
+P	HAP1	1+,sg0+,sg1+	*
+P	HAP2	1+,sg0-,sg1+	*
