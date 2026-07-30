@@ -182,7 +182,7 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
     peak_ram = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
     # ru_maxrss in Ko for Linux
-    peak_ram_gb = peak_ram / 1024 / 102
+    peak_ram_gb = peak_ram / 1024 / 1024
 
     write_report(
         output_dir=output_dir,

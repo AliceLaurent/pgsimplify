@@ -492,5 +492,12 @@ def compress_snarls_pipeline(
     total_node_number_end = len(graph.segments)
     print(f"Small variant simplification : removed {total_node_number - total_node_number_end} nodes from the graph.")
     print(f"Number of nodes after simplification : {total_node_number_end}")
-    return total_node_number_end
+    
+    return {
+    "before_small_variants": total_node_number,
+    "after_small_variants": total_node_number_end,
+    "removed_small_variants": total_node_number - total_node_number_end,
+    "nb_snarls_detected": len(snarl_pairs),
+    "nb_snarls_simplified": len(snarls_to_abstract),
+}
 
