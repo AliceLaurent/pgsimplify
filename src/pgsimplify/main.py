@@ -253,7 +253,7 @@ def main():
         action="store_true",
         dest="keep_temporary_files",
         default=False,
-        help="Keep the temporary fiels generating during piepline."
+        help="Keep the temporary files generating during pipeline execution."
     )
 
     # Command offsets
