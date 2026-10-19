@@ -1,4 +1,5 @@
 import os
+import time
 from gfagraphs import Graph
 from collections import defaultdict
 from itertools import pairwise
@@ -235,6 +236,7 @@ def export_subgraphs(graph: Graph, chains, out_dir: str) -> None:
                     **pdata,
                     "path": chunk
                 }
+    subgraph_build_time = time.perf_counter()
 
     # Save subgraphs
     for sid, sg in enumerate(subgraphs):
@@ -243,6 +245,8 @@ def export_subgraphs(graph: Graph, chains, out_dir: str) -> None:
         sg.headers = graph.headers
         output_path = os.path.join(out_dir, f"sg{sid}.gfa")
         sg.save_graph(output_path, minimal=True)
+    subgraph_save_time = time.perf_counter()
+    return subgraph_build_time, subgraph_save_time
 
 
 def build_bubbles_chains(bubbles):
@@ -320,12 +324,14 @@ def abstract_snarls(graph, snarl_nodes: list[set[str]], snarl_pairs, snarl_sizes
 
     # Build chains
     chains = build_bubbles_chains(snarls)
+    snarls_abstraction_time = time.perf_counter()
 
     # Export of the subgraphs if the option is activated
+    subgraph_build_time, subgraph_save_time = 0, 0
     if save_subgraphs :
         print("Save subgraphs...")
         output_sg = os.path.join(output_dir, f"subgraphs")
-        export_subgraphs(graph, chains, output_sg)
+        subgraph_build_time, subgraph_save_time = export_subgraphs(graph, chains, output_sg)
 
     # Compute simplified graph
     print("Compute simplified graph...")
@@ -398,6 +404,9 @@ def abstract_snarls(graph, snarl_nodes: list[set[str]], snarl_pairs, snarl_sizes
     # Update the graph
     graph.sequence_offsets()
     graph.compute_neighbors()
+    main_graph_build_time = time.perf_counter()
+
+    return snarls_abstraction_time, main_graph_build_time, subgraph_build_time, subgraph_save_time
 
 def compress_snarls_pipeline(
     gfa_path: str,
@@ -438,15 +447,18 @@ def compress_snarls_pipeline(
     if snarl_pairs == []:
         print("No variants to simplify")
         return
+    snarl_tree_build_time = time.perf_counter()
 
     # Load graph
     print("Load graph...")
     graph = Graph(gfa_path)
+    graph_load_time = time.perf_counter()
 
     total_node_number = len(graph.segments)
 
     # Compute interior nodes and size of bubbles
     snarl_nodes, snarl_sizes = extract_subgraphs(graph, snarl_pairs)
+    node_and_size_extraction_time = time.perf_counter()
 
     # Supression mask associated to bubbles index
     suppression_mask = [True if size > 0 and size < min_variant_size else False for size in snarl_sizes]
@@ -478,15 +490,17 @@ def compress_snarls_pipeline(
     snarls_to_abstract = [nodes for i, nodes in enumerate(snarl_nodes) if i in snarls_to_abstract_index]
     snarl_pairs_to_abstract = [pairs for i, pairs in enumerate(snarl_pairs) if i in snarls_to_abstract_index]
     snarl_sizes = [sizes for i, sizes in enumerate(snarl_sizes) if i in snarls_to_abstract_index]
+    dfs_time = time.perf_counter()
 
     # Abstract snarls in original graph and store subgraphs
-    abstract_snarls(graph, snarls_to_abstract, snarl_pairs_to_abstract, snarl_sizes, output_dir, save_subgraphs)
+    snarls_abstraction_time, main_graph_build_time, subgraph_build_time, subgraph_save_time = abstract_snarls(graph, snarls_to_abstract, snarl_pairs_to_abstract, snarl_sizes, output_dir, save_subgraphs)
 
     # Save final graph
     print(f"Save simplified graph...")
     os.makedirs(output_dir, exist_ok=True)
     output_gfa = os.path.join(output_dir, f"main_graph.gfa")
     graph.save_graph(output_gfa, minimal=True)
+    graph_save_time = time.perf_counter()
 
     # Simplification summary
     total_node_number_end = len(graph.segments)
@@ -499,5 +513,14 @@ def compress_snarls_pipeline(
     "removed_small_variants": total_node_number - total_node_number_end,
     "nb_snarls_detected": len(snarl_pairs),
     "nb_snarls_simplified": len(snarls_to_abstract),
+    "graph_load_time": graph_load_time,
+    "snarl_tree_build_time": snarl_tree_build_time,
+    "node_and_size_extraction_time": node_and_size_extraction_time,
+    "dfs_time": dfs_time,
+    "snarls_abstraction_time": snarls_abstraction_time,
+    "main_graph_build_time": main_graph_build_time,
+    "subgraph_build_time": subgraph_build_time,
+    "subgraph_save_time": subgraph_save_time,
+    "graph_save_time": graph_save_time
 }
 

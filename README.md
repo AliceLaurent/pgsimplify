@@ -161,8 +161,8 @@ where:
 
 - **main_graph.gfa** is the simplified graph.
 - **subgraphs/** contains one GFA file for each exported subgraph (unless `--no-subgraphs-save` is specified).
-- **simplification_report.txt** gives informations about parameters, execution, statistics and performance of the pipeline
-
+- **simplification_report.txt** gives informations about parameters, execution, statistics and performance of the pipeline. 
+**Note:** Peak memory usage is calculated correctly on macOS and Linux and divided by 1024² in other cases.
 Temporary files required by `vg` are created automatically during execution and removed afterwards.
 
 ---

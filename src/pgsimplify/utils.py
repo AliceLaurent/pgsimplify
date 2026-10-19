@@ -148,7 +148,9 @@ def write_report(
     min_variant,
     save_subgraphs,
     compression,
+    vg_snarls_timestamp,
     snarls,
+    start_time,
     elapsed,
     peak_ram_gb,
 ):
@@ -159,6 +161,29 @@ def write_report(
     final = snarls["after_small_variants"]
 
     total_removed = initial - final
+
+    # Detailed execution times
+    graph_load_time = compression["graph_load_time"] - start_time
+    linear_compression_time = compression["linear_compression_time"] - compression["graph_load_time"]
+    snp_mnp_compression_time = compression["snp_mnp_compression_time"] - compression["linear_compression_time"]
+    temporary_saving_time = compression["temporary_saving_time"] -  compression["snp_mnp_compression_time"]
+    vg_snarls_time = vg_snarls_timestamp - compression["temporary_saving_time"]
+    snarl_tree_build_time = snarls["snarl_tree_build_time"] - vg_snarls_timestamp
+    compressed_graph_load_time = snarls["graph_load_time"] - snarls["snarl_tree_build_time"]
+    node_and_size_extraction_time = snarls["node_and_size_extraction_time"] - snarls["graph_load_time"]
+    dfs_time = snarls["dfs_time"] - snarls["node_and_size_extraction_time"]
+    snarls_abstraction_time = snarls["snarls_abstraction_time"] - snarls["dfs_time"]
+    if snarls["subgraph_build_time"] != 0:
+        subgraph_build_time = snarls["subgraph_build_time"] - snarls["snarls_abstraction_time"]
+        subgraph_save_time = snarls["subgraph_save_time"] - snarls["subgraph_build_time"]
+        main_graph_build_time = snarls["main_graph_build_time"] - snarls["subgraph_save_time"]
+    else:
+        subgraph_build_time = 0
+        subgraph_save_time = 0
+        main_graph_build_time = snarls["main_graph_build_time"] - snarls["snarls_abstraction_time"]
+    graph_save_time = snarls["graph_save_time"] - snarls["main_graph_build_time"]
+
+
 
     with open(report, "w") as f:
 
@@ -206,3 +231,21 @@ def write_report(
         f.write("-" * 30 + "\n")
         f.write(f"Wall time                            : {elapsed:.2f} s\n")
         f.write(f"Peak RAM                             : {peak_ram_gb:.2f} GB\n")
+
+        f.write("Detailed execution times\n")
+        f.write("-" * 30 + "\n")
+        f.write(f"Graph load time (gfagraphs)           : {graph_load_time:.2f} s\n")
+        f.write(f"Linear compression time               : {linear_compression_time:.2f} s\n")
+        f.write(f"SNP/MNP compression time              : {snp_mnp_compression_time:.2f} s\n")
+        f.write(f"Temporary saving time (gfagraphs)     : {temporary_saving_time:.2f} s\n")
+        f.write(f"Snarls detection time (vg snarls)     : {vg_snarls_time:.2f} s\n")
+        f.write(f"Snarl tree build time                 : {snarl_tree_build_time:.2f} s\n")
+        f.write(f"Compressed graph load time (gfagraphs): {compressed_graph_load_time:.2f} s\n")
+        f.write(f"Node and size extraction time         : {node_and_size_extraction_time:.2f} s\n")
+        f.write(f"DFS time                              : {dfs_time:.2f} s\n")
+        f.write(f"Snarls abstraction time               : {snarls_abstraction_time:.2f} s\n")
+        if subgraph_build_time != 0:
+            f.write(f"Subgraph build time                   : {subgraph_build_time:.2f} s\n")
+            f.write(f"Subgraph save time (gfagraphs)        : {subgraph_save_time:.2f} s\n")
+        f.write(f"Main graph build time                 : {main_graph_build_time:.2f} s\n")
+        f.write(f"Main graph save time (gfagraphs)      : {graph_save_time:.2f} s\n")

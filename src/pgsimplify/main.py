@@ -4,6 +4,7 @@ import subprocess
 import shutil
 import time
 import resource
+import sys
 from gfagraphs import Graph
 from pathlib import Path
 
@@ -36,6 +37,7 @@ def compress_graph(input_gfa, max_len_to_collapse, tmpdir):
 
     graph.compute_neighbors()
     graph.sequence_offsets()
+    graph_load_time = time.perf_counter()
 
     # Print node number
     nb_nodes_begin = len(graph.segments)
@@ -47,6 +49,7 @@ def compress_graph(input_gfa, max_len_to_collapse, tmpdir):
     nb_removed = nb_nodes_begin - nb_nodes_non_branching_path_compression
     print(f"Non-branching paths compression : removed {nb_removed} nodes form the graph ({round(nb_removed/nb_nodes_begin*100,ndigits=2)}%)")
     nb_nodes_middle = len(graph.segments)
+    linear_compression_time = time.perf_counter()
 
     # SNP/MNPs compression
     compress_bubbles_chains(
@@ -57,9 +60,11 @@ def compress_graph(input_gfa, max_len_to_collapse, tmpdir):
     nb_removed = nb_nodes_middle - nb_nodes_snp_mnp_compression
     print(f"SNP/MNPs compression : removed {nb_removed} nodes form the graph ({round(nb_removed/nb_nodes_middle*100,ndigits=2)}%)")
     print(f"Number of nodes after non-branching paths and SNP/MNPs compression : {nb_nodes_snp_mnp_compression}")
+    snp_mnp_compression_time = time.perf_counter()
 
     # Temporary saving the graph
     graph.save_graph(str(tmpdir), minimal=True)
+    temporary_saving_time = time.perf_counter()
 
     return {
     "initial_nodes": nb_nodes_begin,
@@ -67,6 +72,10 @@ def compress_graph(input_gfa, max_len_to_collapse, tmpdir):
     "after_snp": nb_nodes_snp_mnp_compression,
     "removed_non_branching": nb_nodes_begin - nb_nodes_non_branching_path_compression,
     "removed_snp": nb_nodes_middle - nb_nodes_snp_mnp_compression,
+    "graph_load_time": graph_load_time,
+    "linear_compression_time": linear_compression_time,
+    "snp_mnp_compression_time": snp_mnp_compression_time,
+    "temporary_saving_time": temporary_saving_time
 }
 
 
@@ -162,6 +171,7 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
 
     # Compute snarls on compressed graph using vg snarls
     compute_snarls(tmpdir)
+    vg_snarls_time = time.perf_counter()
 
     # Simplify small variants
     json_file = tmpdir / "graph.json"
@@ -181,8 +191,12 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
     # Memory peak
     peak_ram = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
-    # ru_maxrss in Ko for Linux
-    peak_ram_gb = peak_ram / 1024 / 1024
+    # ru_maxrss in Ko for macOS
+    if sys.platform == "darwin":
+        peak_ram_gb = peak_ram / (1024 ** 3)
+    else:  # ru_maxrss in KiB for Linux
+        peak_ram_gb = peak_ram / (1024 ** 2)
+
 
     write_report(
         output_dir=output_dir,
@@ -191,7 +205,9 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
         min_variant=min_variant_size,
         save_subgraphs=save_subgraphs,
         compression=compression_stats,
+        vg_snarls_timestamp=vg_snarls_time,
         snarls=snarl_stats,
+        start_time=start_time,
         elapsed=elapsed,
         peak_ram_gb=peak_ram_gb,
     )
