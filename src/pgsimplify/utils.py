@@ -1,9 +1,52 @@
 import re
+import json
 from gfagraphs import Graph
 from itertools import pairwise
 from collections import defaultdict
 from pathlib import Path
 from datetime import datetime
+
+
+def parse_snarls(json_path: str):
+    # Load snarl json file and return a list of boundaries and a list of parents with the same order
+    # The index of a element in a list corresponds to the index of the structure
+    # The boundaries and parents are stored as a tuple of (start, end) node ids, with start < end
+    # If there is no parent, the parent is set to None
+    boundaries = []
+    parents = []
+
+    with open(json_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+
+            data = json.loads(line)
+
+            start = int(data["start"]["node_id"])
+            end = int(data["end"]["node_id"])
+            if start > end:
+                temp = start
+                start = end
+                end = temp
+            key = (str(start), str(end))
+
+            parent = None
+            if "parent" in data:
+                p = data["parent"]
+                p_start = int(p["start"]["node_id"])
+                p_end = int(p["end"]["node_id"])
+                if p_start > p_end:
+                    temp = p_start
+                    p_start = p_end
+                    p_end = temp
+                parent = (str(p_start), str(p_end))
+
+            boundaries.append(key)
+            parents.append(parent)
+
+    return boundaries, parents
+
 
 def compute_edge_orientation(graph):
     """
@@ -168,13 +211,13 @@ def write_report(
     snp_mnp_compression_time = compression["snp_mnp_compression_time"] - compression["linear_compression_time"]
     temporary_saving_time = compression["temporary_saving_time"] -  compression["snp_mnp_compression_time"]
     vg_snarls_time = vg_snarls_timestamp - compression["temporary_saving_time"]
-    snarl_tree_build_time = snarls["snarl_tree_build_time"] - vg_snarls_timestamp
-    compressed_graph_load_time = snarls["graph_load_time"] - snarls["snarl_tree_build_time"]
+    bubbles_load_and_index_time = snarls["bubbles_load_and_index_time"] - vg_snarls_timestamp
+    compressed_graph_load_time = snarls["graph_load_time"] - snarls["bubbles_load_and_index_time"]
     node_and_size_extraction_time = snarls["node_and_size_extraction_time"] - snarls["graph_load_time"]
-    dfs_time = snarls["dfs_time"] - snarls["node_and_size_extraction_time"]
-    snarls_abstraction_time = snarls["snarls_abstraction_time"] - snarls["dfs_time"]
+    bubbles_selection_time = snarls["bubbles_selection_time"] - snarls["node_and_size_extraction_time"]
+    bubbles_abstraction_time = snarls["bubbles_abstraction_time"] - snarls["bubbles_selection_time"]
     if snarls["subgraph_build_time"] != 0:
-        subgraph_build_time = snarls["subgraph_build_time"] - snarls["snarls_abstraction_time"]
+        subgraph_build_time = snarls["subgraph_build_time"] - snarls["bubbles_abstraction_time"]
         subgraph_save_time = snarls["subgraph_save_time"] - snarls["subgraph_build_time"]
         main_graph_build_time = snarls["main_graph_build_time"] - snarls["subgraph_save_time"]
     else:
@@ -215,8 +258,8 @@ def write_report(
         f.write(f"    Remaining nodes                  : {compression['after_snp']}\n\n")
 
         f.write("Small variant simplification\n")
-        f.write(f"    Snarls detected                  : {snarls['nb_snarls_detected']}\n")
-        f.write(f"    Snarls simplified                : {snarls['nb_snarls_simplified']}\n")
+        f.write(f"    Bubbles detected                  : {snarls['nb_bubbles_detected']}\n")
+        f.write(f"    Bubbles simplified                : {snarls['nb_bubbles_simplified']}\n")
         f.write(f"    Removed nodes                    : {snarls['removed_small_variants']}\n")
         f.write(f"    Remaining nodes                  : {snarls['after_small_variants']}\n\n")
 
@@ -239,11 +282,11 @@ def write_report(
         f.write(f"SNP/MNP compression time              : {snp_mnp_compression_time:.2f} s\n")
         f.write(f"Temporary saving time (gfagraphs)     : {temporary_saving_time:.2f} s\n")
         f.write(f"Snarls detection time (vg snarls)     : {vg_snarls_time:.2f} s\n")
-        f.write(f"Snarl tree build time                 : {snarl_tree_build_time:.2f} s\n")
+        f.write(f"Bubbles load and index time           : {bubbles_load_and_index_time:.2f} s\n")
         f.write(f"Compressed graph load time (gfagraphs): {compressed_graph_load_time:.2f} s\n")
         f.write(f"Node and size extraction time         : {node_and_size_extraction_time:.2f} s\n")
-        f.write(f"DFS time                              : {dfs_time:.2f} s\n")
-        f.write(f"Snarls abstraction time               : {snarls_abstraction_time:.2f} s\n")
+        f.write(f"Bubbles selection time                : {bubbles_selection_time:.2f} s\n")
+        f.write(f"Bubbles abstraction time              : {bubbles_abstraction_time:.2f} s\n")
         if subgraph_build_time != 0:
             f.write(f"Subgraph build time                   : {subgraph_build_time:.2f} s\n")
             f.write(f"Subgraph save time (gfagraphs)        : {subgraph_save_time:.2f} s\n")
