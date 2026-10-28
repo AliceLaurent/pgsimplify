@@ -7,13 +7,14 @@ from pgsimplify.snarl_tree import SnarlTree
 from pgsimplify.utils import parse_snarls
 from pgsimplify.bubble import Bubble
 
-def extract_subgraphs(graph, bubbles, boundary_to_bubble_index):
+def extract_subgraphs(graph, bubbles, min_variant_size):
     """
     Compute size and extact the nodes that are inside of a bubble represented by a couple of boundary nodes 
-    For every buble, nodes that are on a path between the two boundary nodes will be added to its internal node sets
+    For every bubble, nodes that are on a path between the two boundary nodes will be added to its internal node sets
     To do so, path are traversed and each bubble has its own interval that is opened when the first boudary node is met and
     closed when the second is found. While the interval remains open, current nodes are added to internal nodes set
-    The longest path between the two boudaries in term of number of bases found in the graph is the bubble size
+    The longest path between the two boudaries in term of number of bases found in the graph is the bubble size.
+    Bubbles are discarded if the size is greater than min_variant_size
 
     Parameters
     ----------
@@ -38,9 +39,11 @@ def extract_subgraphs(graph, bubbles, boundary_to_bubble_index):
         start_map[s].append(i)
         end_map[t].append(i)
 
+    # Set of bubble with size >= min_variant_size, that will not be simplified and are not followed anymore
+    discarded = set()
     # Traverse all paths only once
     for _, path_data in graph.paths.items():
-         # consigne l'etat d'un intervalle
+        # consigne l'etat d'un intervalle
         # 0 -> L'intervalle est fermé (aucune extremit n'a ete rencontre dans le path)
         # 1 -> On a  rencontre source mais pas sink (on est entree dans l'intervalle dans le "bon" sens)
         # -1 -> On a rencontre sink, mais pas source (on est entree dans le sous graphe par sink)
@@ -58,83 +61,84 @@ def extract_subgraphs(graph, bubbles, boundary_to_bubble_index):
         }
     
         # Course of the path
-        for node, orient in path_data['path']:
+        for node, _ in path_data['path']:
 
             # Current node is added to all opened intervals and its length to current length count
+            to_remove = set() # A set can't be modified while iteration, so new discarded nodes are stored
             for pid in active:
                 if state[pid]["mode"] != 0:
-                    bubbles[pid].interior_nodes.add(node)
-                    state[pid]["length"] += graph.segments[node]["length"]
+                    if state[pid]["length"] >= min_variant_size :
+                        discarded.add(pid)
+                        bubbles[pid] = None
+                        to_remove.add(pid)
+                    else :
+                        bubbles[pid].interior_nodes.add(node)
+                        state[pid]["length"] += graph.segments[node]["length"]
+            active.difference_update(to_remove)
 
             # If the node is a bubble source
             if node in start_map:
                 # For all pairs starting by this node
                 for pid in start_map[node]:
-                    # Interval is opened if it was closed
-                    if pid not in active:
-                        active.add(pid)
-                        state[pid]["mode"] = 1 
-                        bubbles[pid].interior_nodes.add(node)
-                        state[pid]["length"] += graph.segments[node]["length"]
-                        
-                    # Interval is closed if it was open by sink
-                    elif pid in active and state[pid]["mode"] == -1:
-                        active.remove(pid)
-                        bubbles[pid].size = max(bubbles[pid].size, state[pid]["length"]) # Update bubble size for the maximum
-                        state[pid]["length"] = 0
-                        
-                    # If it was open by source, interval is closed and size is set to infinity 
-                    # so that it won't be simplified because it does not correspond to a variant definition
-                    elif pid in active and state[pid]["mode"] == 1:
-                        active.remove(pid)
-                        bubbles[pid].size = float('inf')
-                        state[pid]["length"] = 0
-                        #print(f"Warning : Pendant le parcours du path {path_name}, l'intervalle du sous graphe {pid}, de borne entrante {node} a été ouvert deux fois sans être fermé")
-                    else:
-                        print(f"Warning : Unkown interval state : {state[pid]["mode"]} (should be 0, 1, -1)")
+                    # discarded bubbles are not followed anymore
+                    if pid not in discarded:
+                        # Interval is opened if it was closed
+                        if pid not in active:
+                            active.add(pid)
+                            state[pid]["mode"] = 1 
+                            bubbles[pid].interior_nodes.add(node)
+                            
+                        # Interval is closed if it was open by sink
+                        elif pid in active and state[pid]["mode"] == -1 :
+                            active.remove(pid)
+                            bubbles[pid].size -= graph.segments[node]["length"]
+                            bubbles[pid].size = max(bubbles[pid].size, state[pid]["length"]) # Update bubble size for the maximum
+                            state[pid]["length"] = 0
+                            
+                        # If it was open by source, bubbles is added to discarded bubbles
+                        # so that it won't be simplified because it does not correspond to a variant definition
+                        elif pid in active and state[pid]["mode"] == 1:
+                            active.remove(pid)
+                            discarded.add(pid)
+                            bubbles[pid] = None
+                            #print(f"Warning : Pendant le parcours du path {path_name}, l'intervalle du sous graphe {pid}, de borne entrante {node} a été ouvert deux fois sans être fermé")
+                        else:
+                            print(f"Warning : Unkown interval state : {state[pid]["mode"]} (should be 0, 1, -1)")
 
             # If the node is a bubble sink
             if node in end_map:
                 # For all pairs ending by this node
                 for pid in end_map[node]:
-                    # Interval is open if it was closed
-                    if pid not in active:
-                        active.add(pid)
-                        state[pid]["mode"] = -1
-                        bubbles[pid].interior_nodes.add(node)
-                        state[pid]["length"] += graph.segments[node]["length"]
+                    # discarded bubbles are not followed anymore
+                    if pid not in discarded:
+                        # Interval is open if it was closed
+                        if pid not in active:
+                            active.add(pid)
+                            state[pid]["mode"] = -1
+                            bubbles[pid].interior_nodes.add(node)
 
-                     # Interval is closed if it was open by source
-                    elif pid in active and state[pid]["mode"] == 1:
-                        active.remove(pid)
-                        bubbles[pid].size = max(bubbles[pid].size, state[pid]["length"]) # Update bubble size for the maximum
-                        state[pid]["length"] = 0
+                        # Interval is closed if it was open by source
+                        elif pid in active and state[pid]["mode"] == 1:
+                            active.remove(pid)
+                            bubbles[pid].size -= graph.segments[node]["length"]
+                            bubbles[pid].size = max(bubbles[pid].size, state[pid]["length"]) # Update bubble size for the maximum
+                            state[pid]["length"] = 0
 
-                    # If it was open by sink, interval is closed and size is set to infinity 
-                    # so that it won't be simplified because it does not correspond to a variant definition
-                    elif pid in active and state[pid]["mode"] == -1:
-                        active.remove(pid)
-                        bubbles[pid].size = float('inf')
-                        state[pid]["length"] = 0
-                        #print(f"Warning : Pendant le parcours du path {path_name}, l'intervalle du sous graphe {pid}, de borne sortante {node} a été ouvert deux fois sans être fermé")
-                    else:
-                        print(f"Warning : Unkown interval state : {state[pid]["mode"]} (should be 0, 1, -1)")
+                        # If it was open by sink, bubbles is added to discarded bubbles
+                        # so that it won't be simplified because it does not correspond to a variant definition
+                        elif pid in active and state[pid]["mode"] == -1:
+                            active.remove(pid)
+                            discarded.add(pid)
+                            bubbles[pid] = None
+                        else:
+                            print(f"Warning : Unkown interval state : {state[pid]["mode"]} (should be 0, 1, -1)")
 
         # At the end of the path, if interval are still open, it means the bubble doesn't correspond to variant definition
-        # Size is set to infinity so that the bubble will not be simplified
+        # Bubble is added to discarded so that the bubble will not be simplified
         for pid in active:
-            bubbles[pid].size = float('inf')
-            state[pid]["length"] = 0
-            #print(f"Warning : Pendant le parcours du path {path_name}, l'intervalle du sous graphe {pid}, de borne sortante {node} n'a jamais été fermé")
-
-
-    # Remove boudaries size from the bubble size
-    for pid in range(len(bubbles)):
-        source, sink = bubbles[pid].boundaries
-        bubbles[pid].size -= graph.segments[source]["length"]
-        bubbles[pid].size -= graph.segments[sink]["length"]
-        if bubbles[pid].size < 0:
-            print("Warning : Negative bubble size")
+            discarded.add(pid)
+            bubbles[pid] = None
+           
 
 
 def export_subgraphs(graph: Graph, chains, bubbles: dict[int, Bubble], out_dir: str) -> None:
@@ -503,7 +507,7 @@ def compress_snarls_pipeline(
     total_node_number = len(graph.segments)
 
     # Compute interior nodes and size of bubbles
-    extract_subgraphs(graph, bubbles_list, boundary_to_bubble_index)
+    extract_subgraphs(graph, bubbles_list, min_variant_size)
     node_and_size_extraction_time = time.perf_counter()
 
     # Select the bubbles to simplify, which are the ones that are smaller than min_variant_size 
@@ -511,14 +515,11 @@ def compress_snarls_pipeline(
     print("Select variants to simplify...")
     bubbles_to_abstract = {}
     for i, bubble in enumerate(bubbles_list):
-        if bubble.size > 0 and bubble.size < min_variant_size :
-            if bubble.parent is None :
-                bubbles_to_abstract[i] = bubble
-            else :
-                parent = bubbles_list[bubble.parent] 
-                if parent.size >= min_variant_size :
-                    bubbles_to_abstract[i] = bubble
-    
+        if bubble is None :
+            continue
+        if bubble.parent is None or bubbles_list[bubble.parent] is None :
+            bubbles_to_abstract[i] = bubble
+
     bubbles_selection_time = time.perf_counter()
 
     # Abstract snarls in original graph and store subgraphs
