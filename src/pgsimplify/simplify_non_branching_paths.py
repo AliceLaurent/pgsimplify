@@ -283,33 +283,23 @@ def compress_non_branching_paths(graph : Graph):
 
     graph.segments = new_segments
     
-    # Paths rewriting : only keep the nodes that are still in the new nodes set
-    new_paths = {}
-
-    for name, pdata in graph.paths.items():
-
-        new_path = []
-
-        for n, o in pdata['path']:
-
-            if n not in graph.segments:
-                continue
-
-            new_path.append((n, o))
-
-        new_paths[name] = {
-        **pdata,
-        'path': new_path
-    }
-        
-    graph.paths = new_paths
-
-    # New edges set
+    # Paths and edges rewriting : only keep the nodes that are still in the new nodes set
     graph.lines = {}
 
     for pdata in graph.paths.values():
-        for (u, ou), (v, ov) in pairwise(pdata["path"]):
-            graph.add_edge(u, ou, v, ov)
+        new_path = []
+
+        for node, orient in pdata["path"]:
+            if node not in graph.segments:
+                continue
+
+            if new_path:
+                u, ou = new_path[-1]
+                graph.add_edge(u, ou, node, orient)
+
+            new_path.append((node, orient))
+
+        pdata["path"] = new_path
 
     for data in graph.segments.values():
         data["successors"] = []
