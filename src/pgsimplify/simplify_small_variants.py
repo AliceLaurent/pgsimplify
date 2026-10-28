@@ -200,44 +200,40 @@ def export_subgraphs(graph: Graph, chains, bubbles: dict[int, Bubble], out_dir: 
 
     # Add paths to subgraphs
     for path_name, pdata in graph.paths.items():
+        candidate_chunks = defaultdict(list)
+        current_chunks = {}
 
-        nodes_in_path = {n for n, _ in pdata["path"]}
+        for n, o in pdata["path"]:
+            subgraph_ids = node_to_subgraphs.get(n, [])
+            active_ids = set(subgraph_ids)
 
-        candidate_sgs = set()
+            # Close chunks for subgraphs that do not contain this node
+            for sid in list(current_chunks):
+                if sid not in active_ids:
+                    candidate_chunks[sid].append(current_chunks.pop(sid))
 
-        for n in nodes_in_path:
-            candidate_sgs.update(node_to_subgraphs.get(n, []))
+            # Extend or start a chunk for each subgraph containing this node
+            for sid in subgraph_ids:
+                if sid not in current_chunks:
+                    current_chunks[sid] = []
 
-        for sid in candidate_sgs:
+                current_chunks[sid].append((n, o))
 
-            node_set = subgraph_nodes[sid]
+        # Close remaining chunks
+        for sid, chunk in current_chunks.items():
+            candidate_chunks[sid].append(chunk)
 
-            chunks = []
-            current_chunk = []
-
-            for n, o in pdata["path"]:
-
-                if n in node_set:
-                    current_chunk.append((n, o))
-
-                else:
-                    if current_chunk:
-                        chunks.append(current_chunk)
-                        current_chunk = []
-
-            if current_chunk:
-                chunks.append(current_chunk)
-
-            # Introduces occurences in cases a same path traverse a subgrpahs multiple times
+        # Store path occurrences, preserving the original naming convention
+        for sid, chunks in candidate_chunks.items():
             for occ, chunk in enumerate(chunks):
-
                 if not chunk:
                     continue
 
                 subgraphs[sid].paths[f"{path_name}@{occ}"] = {
                     **pdata,
-                    "path": chunk
+                    "path": chunk,
                 }
+
     subgraph_build_time = time.perf_counter()
 
     # Save subgraphs
