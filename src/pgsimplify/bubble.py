@@ -3,6 +3,5 @@ class Bubble:
         self.boundaries = boundaries
         self.parent = None
         self.interior_nodes = set()
-        self.paths = []
         self.size = 0
 

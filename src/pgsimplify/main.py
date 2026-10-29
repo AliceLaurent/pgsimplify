@@ -10,7 +10,7 @@ from pathlib import Path
 
 from pgsimplify.simplify_non_branching_paths import compress_non_branching_paths
 from pgsimplify.simplify_snp_mnp import compress_bubbles_chains
-from pgsimplify.simplify_small_variants import compress_snarls_pipeline
+from pgsimplify.simplify_small_variants import compress_bubbles_pipeline
 from pgsimplify.offsets_in_gfa import pipeline_offsets
 from pgsimplify.utils import write_report
 
@@ -175,14 +175,14 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
 
     # Simplify small variants
     json_file = tmpdir / "graph.json"
-    snarl_stats = compress_snarls_pipeline(str(gfa_file), str(json_file), str(output_dir), min_variant_size, save_subgraphs)
+    bubbles_stats = compress_bubbles_pipeline(str(gfa_file), str(json_file), str(output_dir), min_variant_size, save_subgraphs)
 
     # Supress temporary directory if the option to keep it is not activated
     if not keep_temp:
         shutil.rmtree(tmpdir)
 
     # Print simplification summary
-    removed_percentage = (compression_stats['initial_nodes'] - snarl_stats["after_small_variants"]) / compression_stats['initial_nodes'] * 100
+    removed_percentage = (compression_stats['initial_nodes'] - bubbles_stats["after_small_variants"]) / compression_stats['initial_nodes'] * 100
     print(f"Removed nodes: {removed_percentage:.2f}% ")
 
     # Print execution time
@@ -206,7 +206,7 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
         save_subgraphs=save_subgraphs,
         compression=compression_stats,
         vg_snarls_timestamp=vg_snarls_time,
-        snarls=snarl_stats,
+        bubbles=bubbles_stats,
         start_time=start_time,
         elapsed=elapsed,
         peak_ram_gb=peak_ram_gb,

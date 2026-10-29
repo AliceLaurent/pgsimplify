@@ -22,14 +22,8 @@ def extract_subgraphs(graph, bubbles, min_variant_size):
         Graph containing the bubbles
     bubbles : list(Bubble)
         List of bubbles
-    boundary_to_bubble_index : dict((str, str) -> int)
-        Mapping from boundary nodes to bubble index
-
-    Returns
-    -------
-    dict(list(str))
-        Dictionnary containing for each bubble its interior nodes
-        The keys are the index of bubbles in the snarl_pairs list
+    min_variant_size : int
+        Threshold under which the variant is simplified
     """
     # Create dictionnaries start/end boundaries -> index in snarl_pairs list
     start_map = defaultdict(list)
@@ -43,15 +37,14 @@ def extract_subgraphs(graph, bubbles, min_variant_size):
     discarded = set()
     # Traverse all paths only once
     for _, path_data in graph.paths.items():
-        # consigne l'etat d'un intervalle
-        # 0 -> L'intervalle est fermé (aucune extremit n'a ete rencontre dans le path)
-        # 1 -> On a  rencontre source mais pas sink (on est entree dans l'intervalle dans le "bon" sens)
-        # -1 -> On a rencontre sink, mais pas source (on est entree dans le sous graphe par sink)
-        # Active is the set of interval that are currently open
+        # Active is the set of interval that are currently open (which means we met one boundary of the bubble, but not the other one)
         active = set()
 
         # State is a dictionnary that store for each bubble :
-        #   - mode : the direction the bubble was entered (1 for start met first, -1 for end met first, 0 if outside of the bubble)
+        #   - mode : Says if the bubble is currently being traversed and in which direction. 
+        #            Has value 0 if the course is currently outside the bubble
+        #            Has value 1 if the bubble is currently traversed and has been entered by node start 
+        #            Has value -1 if the bubble is currently traversed and has been entered by node end 
         #   - length : used to count the size of a bubble on a path
         state = {
             pid: {
@@ -63,9 +56,11 @@ def extract_subgraphs(graph, bubbles, min_variant_size):
         # Course of the path
         for node, _ in path_data['path']:
 
+            # A set can't be modified while iteration, so new discarded nodes are stored
+            to_remove = set() 
             # Current node is added to all opened intervals and its length to current length count
-            to_remove = set() # A set can't be modified while iteration, so new discarded nodes are stored
             for pid in active:
+                # If the length of the bubble is greater than min_variant_size, it will not be simplified -> discarded
                 if state[pid]["mode"] != 0:
                     if state[pid]["length"] >= min_variant_size :
                         discarded.add(pid)
@@ -101,7 +96,6 @@ def extract_subgraphs(graph, bubbles, min_variant_size):
                             active.remove(pid)
                             discarded.add(pid)
                             bubbles[pid] = None
-                            #print(f"Warning : Pendant le parcours du path {path_name}, l'intervalle du sous graphe {pid}, de borne entrante {node} a été ouvert deux fois sans être fermé")
                         else:
                             print(f"Warning : Unkown interval state : {state[pid]["mode"]} (should be 0, 1, -1)")
 
@@ -265,7 +259,7 @@ def build_bubbles_chains(bubbles):
     list[list[int]]
         Chains represented by indices in the bubbles list.
     """
-    # Build map: endpoint -> index of the bubble
+    # Build maps: endpoint -> index of the bubble and endpoint -> number_of bubbles it appears in
     endpoint_to_index = defaultdict(list)
     endpoint_count = defaultdict(int)
 
@@ -281,13 +275,12 @@ def build_bubbles_chains(bubbles):
     for endpoint, count in endpoint_count.items():
         if count == 1:
             chain_endpoints.append(endpoint)
-        if count > 2:
+        if count > 2: # Impossible in snarl tree structure
             raise ValueError(f"Node is boundary of more than two bubbles : {endpoint}")
 
     # Build chains
     chains = []
     visited_bubbles = set()
-
     for endpoint in chain_endpoints:
         start_bubble = endpoint_to_index[endpoint][0]
         if start_bubble in visited_bubbles:
@@ -320,6 +313,7 @@ def build_bubbles_chains(bubbles):
 
         chains.append(chain)
 
+    # May happen in cases where the root of snarl trees form a cycle
     missing = set(bubbles) - visited_bubbles
     if missing:
         raise ValueError(f"Bubbles not covered by any chain: {missing}")
@@ -327,7 +321,7 @@ def build_bubbles_chains(bubbles):
     return chains
         
 
-def abstract_snarls(graph, bubbles, output_dir, save_subgraphs=True):
+def abstract_bubbles(graph, bubbles, output_dir, save_subgraphs=True):
     """
     Compute simplified graph 
 
@@ -345,7 +339,7 @@ def abstract_snarls(graph, bubbles, output_dir, save_subgraphs=True):
 
     # Build chains
     chains = build_bubbles_chains(bubbles)
-    snarls_abstraction_time = time.perf_counter()
+    bubbles_abstraction_time = time.perf_counter()
 
     # Export of the subgraphs if the option is activated
     subgraph_build_time, subgraph_save_time = 0, 0
@@ -427,9 +421,9 @@ def abstract_snarls(graph, bubbles, output_dir, save_subgraphs=True):
     graph.compute_neighbors()
     main_graph_build_time = time.perf_counter()
 
-    return snarls_abstraction_time, main_graph_build_time, subgraph_build_time, subgraph_save_time
+    return bubbles_abstraction_time, main_graph_build_time, subgraph_build_time, subgraph_save_time
 
-def compress_snarls_pipeline(
+def compress_bubbles_pipeline(
     gfa_path: str,
     snarl_tree_path: str,
     output_dir: str,
@@ -438,10 +432,10 @@ def compress_snarls_pipeline(
 ):
     """
     Extract small variants from the graph and store them as subgraphs
-    1. Load bubbles and compute bubbles tree
+    1. Load bubbles
     2. Load the graph
     3. Compute interior nodes and size of all bubbles
-    4. Performs dfs in bubble tree to find the bubbles to simplify
+    4. Select bubbles to simplify (if a parent is simplified, no need to simplify its child)
     5. Organize the bubbles in chains, extract bubbles from original graph and save them
     6. Save the final graph
 
@@ -491,7 +485,6 @@ def compress_snarls_pipeline(
         parent_index = parent_indices.pop()
         bubbles_list[i].parent = parent_index
 
-
     # Case where there is no snarl to simplify
     if bubbles_list == []:
         print("No variants to simplify")
@@ -522,8 +515,8 @@ def compress_snarls_pipeline(
 
     bubbles_selection_time = time.perf_counter()
 
-    # Abstract snarls in original graph and store subgraphs
-    snarls_abstraction_time, main_graph_build_time, subgraph_build_time, subgraph_save_time = abstract_snarls(graph, bubbles_to_abstract, output_dir, save_subgraphs)
+    # Abstract bubbles in original graph and store subgraphs
+    bubbles_abstraction_time, main_graph_build_time, subgraph_build_time, subgraph_save_time = abstract_bubbles(graph, bubbles_to_abstract, output_dir, save_subgraphs)
 
     # Save final graph
     print(f"Save simplified graph...")
@@ -547,7 +540,7 @@ def compress_snarls_pipeline(
     "graph_load_time": graph_load_time,
     "node_and_size_extraction_time": node_and_size_extraction_time,
     "bubbles_selection_time": bubbles_selection_time,
-    "bubbles_abstraction_time": snarls_abstraction_time,
+    "bubbles_abstraction_time": bubbles_abstraction_time,
     "main_graph_build_time": main_graph_build_time,
     "subgraph_build_time": subgraph_build_time,
     "subgraph_save_time": subgraph_save_time,

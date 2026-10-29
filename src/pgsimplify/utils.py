@@ -10,7 +10,7 @@ from datetime import datetime
 def parse_snarls(json_path: str):
     # Load snarl json file and return a list of boundaries and a list of parents with the same order
     # The index of a element in a list corresponds to the index of the structure
-    # The boundaries and parents are stored as a tuple of (start, end) node ids, with start < end
+    # The boundaries and parents are stored as tuples of (start, end) node ids, with start < end
     # If there is no parent, the parent is set to None
     boundaries = []
     parents = []
@@ -192,7 +192,7 @@ def write_report(
     save_subgraphs,
     compression,
     vg_snarls_timestamp,
-    snarls,
+    bubbles,
     start_time,
     elapsed,
     peak_ram_gb,
@@ -201,7 +201,7 @@ def write_report(
     report = Path(output_dir) / "simplification_report.txt"
 
     initial = compression["initial_nodes"]
-    final = snarls["after_small_variants"]
+    final = bubbles["after_small_variants"]
 
     total_removed = initial - final
 
@@ -211,20 +211,20 @@ def write_report(
     snp_mnp_compression_time = compression["snp_mnp_compression_time"] - compression["linear_compression_time"]
     temporary_saving_time = compression["temporary_saving_time"] -  compression["snp_mnp_compression_time"]
     vg_snarls_time = vg_snarls_timestamp - compression["temporary_saving_time"]
-    bubbles_load_and_index_time = snarls["bubbles_load_and_index_time"] - vg_snarls_timestamp
-    compressed_graph_load_time = snarls["graph_load_time"] - snarls["bubbles_load_and_index_time"]
-    node_and_size_extraction_time = snarls["node_and_size_extraction_time"] - snarls["graph_load_time"]
-    bubbles_selection_time = snarls["bubbles_selection_time"] - snarls["node_and_size_extraction_time"]
-    bubbles_abstraction_time = snarls["bubbles_abstraction_time"] - snarls["bubbles_selection_time"]
-    if snarls["subgraph_build_time"] != 0:
-        subgraph_build_time = snarls["subgraph_build_time"] - snarls["bubbles_abstraction_time"]
-        subgraph_save_time = snarls["subgraph_save_time"] - snarls["subgraph_build_time"]
-        main_graph_build_time = snarls["main_graph_build_time"] - snarls["subgraph_save_time"]
+    bubbles_load_and_index_time = bubbles["bubbles_load_and_index_time"] - vg_snarls_timestamp
+    compressed_graph_load_time = bubbles["graph_load_time"] - bubbles["bubbles_load_and_index_time"]
+    node_and_size_extraction_time = bubbles["node_and_size_extraction_time"] - bubbles["graph_load_time"]
+    bubbles_selection_time = bubbles["bubbles_selection_time"] - bubbles["node_and_size_extraction_time"]
+    bubbles_abstraction_time = bubbles["bubbles_abstraction_time"] - bubbles["bubbles_selection_time"]
+    if bubbles["subgraph_build_time"] != 0:
+        subgraph_build_time = bubbles["subgraph_build_time"] - bubbles["bubbles_abstraction_time"]
+        subgraph_save_time = bubbles["subgraph_save_time"] - bubbles["subgraph_build_time"]
+        main_graph_build_time = bubbles["main_graph_build_time"] - bubbles["subgraph_save_time"]
     else:
         subgraph_build_time = 0
         subgraph_save_time = 0
-        main_graph_build_time = snarls["main_graph_build_time"] - snarls["snarls_abstraction_time"]
-    graph_save_time = snarls["graph_save_time"] - snarls["main_graph_build_time"]
+        main_graph_build_time = bubbles["main_graph_build_time"] - bubbles["bubbles_abstraction_time"]
+    graph_save_time = bubbles["graph_save_time"] - bubbles["main_graph_build_time"]
 
 
 
@@ -258,10 +258,10 @@ def write_report(
         f.write(f"    Remaining nodes                  : {compression['after_snp']}\n\n")
 
         f.write("Small variant simplification\n")
-        f.write(f"    Bubbles detected                  : {snarls['nb_bubbles_detected']}\n")
-        f.write(f"    Bubbles simplified                : {snarls['nb_bubbles_simplified']}\n")
-        f.write(f"    Removed nodes                    : {snarls['removed_small_variants']}\n")
-        f.write(f"    Remaining nodes                  : {snarls['after_small_variants']}\n\n")
+        f.write(f"    Bubbles detected                  : {bubbles['nb_bubbles_detected']}\n")
+        f.write(f"    Bubbles simplified                : {bubbles['nb_bubbles_simplified']}\n")
+        f.write(f"    Removed nodes                    : {bubbles['removed_small_variants']}\n")
+        f.write(f"    Remaining nodes                  : {bubbles['after_small_variants']}\n\n")
 
         f.write("Global statistics\n")
         f.write("-" * 30 + "\n")
