@@ -75,6 +75,45 @@ def compute_bubblegun_bubbles(tmpdir: Path):
 
     return json_file
 
+
+def compute_panbubbles(tmpdir: Path):
+    """
+    Calls Billi to detect panbubbles and hairpins
+    and outputs the results in a tab-separated text file.
+
+    Parameters
+    ----------
+    tmpdir : Path
+        Path to the directory containing the compressed graph.
+
+    Returns
+    -------
+    output_file : Path
+        Path to the file containing the detected panbubbles and hairpins.
+    """
+
+    gfa_file = (tmpdir / "compressed_graph.gfa").resolve()
+    output_file = (tmpdir / "bubbles.json").resolve()
+    log_file = (tmpdir / "billi.log").resolve()
+
+    # Detect panbubbles and hairpins
+    with open(output_file, "w") as out, open(log_file, "w") as log:
+        subprocess.run(
+            [
+                "billi",
+                "decompose",
+                "-i", str(gfa_file),
+                "-w",
+            ],
+            stdout=out,
+            stderr=log,
+            cwd=tmpdir.resolve(),
+            check=True,
+            text=True,
+        )
+
+    return output_file
+
 def parse_snarls(json_path: str):
     # Load snarl json file and return a list of boundaries and a list of parents with the same order
     # The index of a element in a list corresponds to the index of the structure
@@ -167,6 +206,79 @@ def parse_bubblegun_bubbles(json_path):
 
     return boundaries, parents
 
+def parse_panbubbles(file_path):
+    """
+    Parse a Billi output file.
+
+    Returns
+    -------
+    boundaries : list[tuple[str, str]]
+        Sorted endpoint pairs for each panbubble and hairpin.
+        Hairpins are represented by (start, start).
+
+    parents : list[tuple[str, str] | None]
+        Sorted endpoint pairs of the parent bubble or hairpin.
+        None if the bubble has no parent.
+
+    Node IDs are returned as strings without orientation characters.
+    Both lists are aligned.
+    """
+
+    def sorted_ends(ends):
+        """Remove orientation characters and sort node IDs numerically."""
+        node_ids = [
+            node.lstrip("><")
+            for node in ends
+        ]
+        return tuple(sorted(node_ids, key=int))
+
+    records = []
+
+    with open(file_path, "r") as f:
+        for line in f:
+            fields = line.rstrip("\n").split("\t")
+
+            if not fields or fields[0] not in ("BB", "HP"):
+                continue
+
+            record_type = fields[0]
+
+            if record_type == "BB":
+                _, bubble_id, depth, parent_id, side1, side2, *_ = fields
+                ends = (side1, side2)
+
+            else:
+                _, bubble_id, side1, side2, *_ = fields
+                parent_id = None
+                ends = (side1, side1)
+
+            records.append({
+                "type": record_type,
+                "id": bubble_id,
+                "parent_id": parent_id,
+                "ends": sorted_ends(ends),
+            })
+
+    # Build a mapping from prefixed bubble IDs to their endpoint pairs
+    bubble_ends = {
+        f"{record['type']}:{record['id']}": record["ends"]
+        for record in records
+    }
+
+    boundaries = []
+    parents = []
+
+    for record in records:
+        boundaries.append(record["ends"])
+
+        parent_id = record["parent_id"]
+
+        if parent_id is None or parent_id == "-1":
+            parents.append(None)
+        else:
+            parents.append(bubble_ends[parent_id])
+
+    return boundaries, parents
 
 def compute_edge_orientation(graph):
     """

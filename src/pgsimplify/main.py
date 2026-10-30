@@ -11,7 +11,7 @@ from pgsimplify.simplify_non_branching_paths import compress_non_branching_paths
 from pgsimplify.simplify_snp_mnp import compress_bubbles_chains
 from pgsimplify.simplify_small_variants import compress_bubbles_pipeline
 from pgsimplify.offsets_in_gfa import pipeline_offsets
-from pgsimplify.utils import write_report, compute_snarls, compute_bubblegun_bubbles, parse_bubblegun_bubbles, parse_snarls
+from pgsimplify.utils import write_report, compute_snarls, compute_bubblegun_bubbles, compute_panbubbles, parse_bubblegun_bubbles, parse_snarls, parse_panbubbles
 
 def compress_graph(input_gfa, max_len_to_collapse, tmpdir):
     """
@@ -127,8 +127,8 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
     os.makedirs(tmpdir, exist_ok=True)
 
     # Check bubble detector value
-    if bubble_detector != "vgsnarls" and bubble_detector != "bubblegun":
-        raise ValueError(f"{bubble_detector} is not a supported bubble detector. Supported detectors are \"vgsnarls\" and \"bubblegun\".")
+    if bubble_detector != "vgsnarls" and bubble_detector != "bubblegun" and bubble_detector != "billi":
+        raise ValueError(f"{bubble_detector} is not a supported bubble detector. Supported detectors are \"vgsnarls\", \"billi\" and \"bubblegun\".")
 
     # Compress graph and store it in temporary directory
     gfa_file = tmpdir / "compressed_graph.gfa"
@@ -140,6 +140,10 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
         compute_bubblegun_bubbles(tmpdir)
         bubble_detector_time = time.perf_counter()
         boundaries_list, parents_list = parse_bubblegun_bubbles(json_file)
+    elif bubble_detector == "billi":
+        compute_panbubbles(tmpdir)
+        bubble_detector_time = time.perf_counter()
+        boundaries_list, parents_list = parse_panbubbles(json_file)
     else :
         compute_snarls(tmpdir)
         bubble_detector_time = time.perf_counter()
@@ -232,7 +236,7 @@ def main():
             "--bubble-detector",
             type=str,
             default="vgsnarls",
-            help="Chooses which bubble detector will be used between \"vgsnarls\" and \"bubblegun\". Default is vgsnarls"
+            help="Chooses which bubble detector will be used between \"vgsnarls\", \"billi\" and \"bubblegun\". Default is vgsnarls"
         )
 
     parser_simplify.add_argument(
