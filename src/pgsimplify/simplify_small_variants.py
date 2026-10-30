@@ -425,7 +425,8 @@ def abstract_bubbles(graph, bubbles, output_dir, save_subgraphs=True):
 
 def compress_bubbles_pipeline(
     gfa_path: str,
-    snarl_tree_path: str,
+    boundaries_list: list[tuple[str, str]],
+    parents_list: list[tuple[str, str]],
     output_dir: str,
     min_variant_size: int = 50,
     save_subgraphs: bool = True,
@@ -443,17 +444,17 @@ def compress_bubbles_pipeline(
     ----------
     gfa_path : str
         input GFA path
-    snarl_tree_path : str
-        input bubble tree path
+    boundaries_list: list[tuple[str, str]]
+        List of couple of nodes representing each bubble by its boundary nodes
+    parents_list: list[tuple[str, str]]
+        Same but corresponding to the parent of the bubble in boundaries_list
     output_gfa : str
         directory to store final simplified graph
     min_variant_size : int
         Variant smaller than min_variant_size will be simplified
     save_subgraphs : bool
-        option tos ave or not the subgraphs
+        option to save or not the subgraphs
     """
-    # Load bubbles
-    boundaries_list, parents_list = parse_snarls(snarl_tree_path)
 
     # Initialize bubbles list and build hashtable to access bubbles indexes by their boundaries
     bubbles_list = []

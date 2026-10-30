@@ -1,6 +1,5 @@
 import argparse
 import os
-import subprocess
 import shutil
 import time
 import resource
@@ -12,7 +11,7 @@ from pgsimplify.simplify_non_branching_paths import compress_non_branching_paths
 from pgsimplify.simplify_snp_mnp import compress_bubbles_chains
 from pgsimplify.simplify_small_variants import compress_bubbles_pipeline
 from pgsimplify.offsets_in_gfa import pipeline_offsets
-from pgsimplify.utils import write_report
+from pgsimplify.utils import write_report, compute_snarls, compute_bubblegun_bubbles, parse_bubblegun_bubbles, parse_snarls
 
 def compress_graph(input_gfa, max_len_to_collapse, tmpdir):
     """
@@ -79,46 +78,8 @@ def compress_graph(input_gfa, max_len_to_collapse, tmpdir):
 }
 
 
-def compute_snarls(tmpdir: Path):
-    """
-    Calls vg snarls and outputs snarls in json format
-    
-    Parameter
-    ----------
-    tmpdir : Path
-        path to compressed graph in which we want to detect snarls
-    """
-    gfa_file = tmpdir / "compressed_graph.gfa"
-    vg_file = tmpdir / "graph.vg"
-    snarls_file = tmpdir / "graph.snarls"
-    json_file = tmpdir / "graph.json"
 
-    # GFA graph file -> VG graph file
-    with open(vg_file, "wb") as out:
-        subprocess.run(
-            ["vg", "convert", "-f", "-W", str(gfa_file)],
-            stdout=out,
-            check=True,
-        )
-
-    # VG graph file -> binary snarls file
-    with open(snarls_file, "wb") as out:
-        subprocess.run(
-            ["vg", "snarls", str(vg_file)],
-            stdout=out,
-            check=True,
-        )
-
-    # binary snarls file -> json snarls file
-    with open(json_file, "w") as out:
-        subprocess.run(
-            ["vg", "view", "-R", str(snarls_file)],
-            stdout=out,
-            check=True,
-            text=True,
-        )
-
-def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_size, save_subgraphs, keep_temp):
+def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_size, bubble_detector, save_subgraphs, keep_temp):
     """
     Performs simplification piepline
     
@@ -135,13 +96,13 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
     save_subgraphs :
         Tells if subgraphs are saved or not
     """
-    # Measure executiont time
+    # Measure execution time
     start_time = time.perf_counter()
 
     input_gfa_file = Path(input_gfa_file)
     output_dir = Path(output_dir)
 
-    # Vérification du fichier d'entrée
+    # Check that input file exists and is a .gfa file
     if not input_gfa_file.is_file():
         raise FileNotFoundError(
             f"Input GFA file not found: {input_gfa_file}"
@@ -152,30 +113,40 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
             f"Input must be a .gfa file, got: {input_gfa_file}"
         )
 
-    # Vérification du dossier de sortie
+    # Check that output is a directory if it exist
     if output_dir.exists() and not output_dir.is_dir():
         raise ValueError(
             f"Output path exists but is not a directory: {output_dir}"
         )
     
-    # Create output_dir if it doesn't exist yet
+    # Create output_dir if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
 
     # Create temporary directory to store temporary files
     tmpdir = Path(output_dir) / "temp"
     os.makedirs(tmpdir, exist_ok=True)
 
+    # Check bubble detector value
+    if bubble_detector != "vgsnarls" and bubble_detector != "bubblegun":
+        raise ValueError(f"{bubble_detector} is not a supported bubble detector. Supported detectors are \"vgsnarls\" and \"bubblegun\".")
+
     # Compress graph and store it in temporary directory
     gfa_file = tmpdir / "compressed_graph.gfa"
     compression_stats = compress_graph(str(input_gfa_file), max_len_to_collapse, gfa_file)
 
-    # Compute snarls on compressed graph using vg snarls
-    compute_snarls(tmpdir)
-    vg_snarls_time = time.perf_counter()
-
+    # Compute bubbles on compressed graph using the chosen detector and parse them
+    json_file = tmpdir / "bubbles.json"
+    if bubble_detector == "bubblegun":
+        compute_bubblegun_bubbles(tmpdir)
+        bubble_detector_time = time.perf_counter()
+        boundaries_list, parents_list = parse_bubblegun_bubbles(json_file)
+    else :
+        compute_snarls(tmpdir)
+        bubble_detector_time = time.perf_counter()
+        boundaries_list, parents_list = parse_snarls(json_file)
+    
     # Simplify small variants
-    json_file = tmpdir / "graph.json"
-    bubbles_stats = compress_bubbles_pipeline(str(gfa_file), str(json_file), str(output_dir), min_variant_size, save_subgraphs)
+    bubbles_stats = compress_bubbles_pipeline(str(gfa_file), boundaries_list, parents_list, str(output_dir), min_variant_size, save_subgraphs)
 
     # Supress temporary directory if the option to keep it is not activated
     if not keep_temp:
@@ -203,9 +174,10 @@ def simplify_graph(input_gfa_file, output_dir, max_len_to_collapse, min_variant_
         input_gfa=input_gfa_file,
         max_len=max_len_to_collapse,
         min_variant=min_variant_size,
+        bubble_detector=bubble_detector,
         save_subgraphs=save_subgraphs,
         compression=compression_stats,
-        vg_snarls_timestamp=vg_snarls_time,
+        bubble_detector_timestamp=bubble_detector_time,
         bubbles=bubbles_stats,
         start_time=start_time,
         elapsed=elapsed,
@@ -257,6 +229,13 @@ def main():
     )
 
     parser_simplify.add_argument(
+            "--bubble-detector",
+            type=str,
+            default="vgsnarls",
+            help="Chooses which bubble detector will be used between \"vgsnarls\" and \"bubblegun\". Default is vgsnarls"
+        )
+
+    parser_simplify.add_argument(
         "--no-subgraphs-save",
         action="store_false",
         dest="save_subgraphs",
@@ -299,6 +278,7 @@ def main():
             args.output_dir,
             args.max_len_to_collapse,
             args.min_variant_size,
+            args.bubble_detector,
             args.save_subgraphs,
             args.keep_temporary_files
         )
